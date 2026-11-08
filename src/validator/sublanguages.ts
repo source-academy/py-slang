@@ -20,6 +20,7 @@ import { NoDeclarationWithoutValueValidator } from "./features/no-declaration-wi
 import { NoDictsValidator } from "./features/no-dicts";
 import { NoKeywordArgsValidator } from "./features/no-keyword-args";
 import { NoTuplesValidator } from "./features/no-tuples";
+import { NoTypingImportsValidator } from "./features/no-typing-imports";
 import { NoTypeAnnotationsValidator } from "./features/no-type-annotations";
 import { RequireTypeAnnotationsValidator } from "./features/require-type-annotations";
 import { FeatureValidator } from "./types";
@@ -112,15 +113,19 @@ export function makeChapter4Validators(): FeatureValidator[] {
 
 /**
  * Typed Python §4 (docs/typed-python-4.md): Python §4 with type annotations. The rules on the
- * annotations themselves: every `def` annotates its parameters and its return type, and a name is
- * declared by an assignment (`x: int = 0`), not on its own (`x: int`).
+ * annotations themselves: every `def` annotates its parameters and its return type, a name is
+ * declared by an assignment (`x: int = 0`), not on its own (`x: int`), and types need no import.
  *
  * These run on the parsed program, before its types are erased, with {@link traverseAST} (the
  * Resolver does not look at annotations: they are not values). The program then runs as a Python §4
  * program: see `prepareTypedProgram` in src/typecheck/.
  */
 export function makeTypedChapter4Validators(): FeatureValidator[] {
-  return [RequireTypeAnnotationsValidator, NoDeclarationWithoutValueValidator];
+  return [
+    RequireTypeAnnotationsValidator,
+    NoDeclarationWithoutValueValidator,
+    NoTypingImportsValidator,
+  ];
 }
 
 export function makeValidatorsForChapter(chapter: number): FeatureValidator[] {

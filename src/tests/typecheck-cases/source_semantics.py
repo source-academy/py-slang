@@ -12,6 +12,6 @@ i = [1, 2][True]                                   # ERROR: No overloads for "__
 j = [0] * True                                     # ERROR: Operator "*" not supported
 while "s":                                         # ERROR: A condition must be a bool, but this is a str
     pass
-# Known gap: the left operand of and/or must be a bool in Python §4, and the checker does not look
-# at it (`3 and 4` has no error).
+# Known limitation (the specification says so): the left operand of and/or must be a bool in Python §4,
+# and the static checker does not look at it (`3 and 4` has no error: the engines reject it).
 k = 3 and 4

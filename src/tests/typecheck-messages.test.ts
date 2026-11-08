@@ -95,6 +95,12 @@ describe("messages for students", () => {
     ).toBe("The type of this argument cannot be determined");
   });
 
+  test("Any is not available", () => {
+    expect(studentMessage("Type `Any` is not allowed")).toBe(
+      "The type Any is not available: for a function that works for any type, use a type parameter, as in def f[A](x: A) -> A",
+    );
+  });
+
   test("other messages keep their first line, without the detail", () => {
     expect(studentMessage("Expected 1 positional argument")).toBe("Expected 1 positional argument");
     expect(

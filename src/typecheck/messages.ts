@@ -104,6 +104,12 @@ const REWRITES: { pattern: RegExp; message: (match: RegExpExecArray) => string }
     message: ([, type]) => `A value of type ${type} cannot be indexed`,
   },
   {
+    // x: Any (after `from typing import Any`, which py-slang rejects before the checker is asked)
+    pattern: /^Type `Any` is not allowed/,
+    message: () =>
+      "The type Any is not available: for a function that works for any type, use a type parameter, as in def f[A](x: A) -> A",
+  },
+  {
     pattern: /^Type of "(.*)" is (?:partially )?unknown/,
     message: ([, name]) =>
       `The type of ${name} cannot be determined: declare it, as in ${name}: list[int] = []`,

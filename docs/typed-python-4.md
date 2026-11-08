@@ -76,7 +76,7 @@ Decided in phase 0 unless marked *proposed*. Each rule was tried on the spike's 
 | Lambdas | Unannotated (Python has no syntax for annotating lambdas). Their parameter types come from the context: an argument position with a function type (`map(lambda x: x + 1, xs)`), or a name with a declared type (`square: Callable[[int], int] = lambda x: x * x`). A lambda without such a context is an error (`reportUnknownLambdaType`, `reportUnknownParameterType`). |
 | Variables | `x: T = e` declares `x`'s type; every assignment, also through `nonlocal`/`global`, must respect it. Without an annotation, `x` has at each use the type of the value assigned last (pyright's flow typing). An empty `[]` needs a declared type (`reportUnknownVariableType`, `reportUnknownArgumentType`). |
 | Type syntax | `int`, `float`, `complex`, `str`, `bool`, `None`, `list[T]`, `Callable[[A, B], R]`, `Pair[H, T]`, `LList[T]`, `Stream[T]`, unions `A \| B`, generic functions in PEP 695 form (`def f[T](...)`), and type aliases (`type Rational = Pair[int, int]`, also generic and recursive: `type Tree[T] = Pair[T, LList[Tree[T]]]`). No `typing` imports needed. |
-| `Any` | *Proposed:* not part of the language (not in the prelude, and no `typing` imports). With opaque syntax types for §4 (below), nothing in the prelude needs it. Names from a module without stubs are unchecked. |
+| `Any` | Decided: not part of the language. It is not a name (the prelude has it only as a private alias of its own); `from typing import …` is rejected by py-slang (`NoTypingImportsValidator`, with a message that says that types need no import), and an `Any` that gets in nevertheless is an error where it is used (`reportExplicitAny`). A function that works for any type has a type parameter. With opaque syntax types for §4 (below), nothing in the prelude needs it. Names from a module without stubs are unchecked. |
 | `Pair` variance | Invariant, which is correct once `set_head`/`set_tail` exist. It makes some error messages longer. Consider a covariant `Pair` for a later Typed §2. |
 | Pair indexing (`p[0]`) | A type error: pairs are not lists to the checker. Python §4 programs that index pairs must use `head`/`tail`. |
 | `**` | Follows Python §4's operator table instead of typeshed's `Any`: `int ** int` is `int` for a non-negative literal exponent, `float` for a negative one, and `int \| float` otherwise; with a `float` operand (and no `complex`), `float`. So `def expt(b: int, n: int) -> int: return b ** n` is rejected (`expt(2, -1)` is `0.5`); declare `-> float` or use the recursive `expt`. |
@@ -166,8 +166,8 @@ Done so far:
   which Python §4 allows) and that pyright's `**` on two `int`s is `Any`. Both are fixed in
   the spike's [`patch-builtins.cjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/patch-builtins.cjs), and the rules table records them.
 
-Still to do: review of the rules and the specification with the SICPy authors, and a decision on
-`Any`.
+Still to do: review of the rules and the specification with the SICPy authors. (`Any` is decided:
+there is none.)
 
 ### Phase 1: annotations in py-slang's parser (≈ 3–4 days)
 
@@ -263,9 +263,15 @@ Done. What was built, and where it differs from the first sketch:
 * **Configuration** (`config.ts`): `standard` mode, the unknown-type rules as errors,
   `reportRedeclaration` off (a name can be defined again in §3 and §4) and `reportUnusedExpression`
   off (`1 + 2` in a REPL).
-* **Not done:** the rule that the left operand of `and` and `or` must be a `bool` (pyright does not
-  check it; `3 and 4` is accepted: a `test.todo`). The dynamic check stays. Deferred, as the sketch
-  allowed.
+* **Not done, and documented:** the rule that the left operand of `and` and `or` must be a `bool`.
+  Pyright has no rule for it, and typeshed cannot be patched to give one (`and` calls no method of the
+  operand's type that could be changed: making `__bool__` an error is what rejects `if 1:`, and it has
+  no effect on `and`), so `3 and 4` has no static error and is rejected when it runs, which the
+  specification says ("Static Type Checking") and a test shows. Only a workaround outside pyright could
+  check it: py-slang asking for the type of each such operand (hover requests, which may meet the
+  problem of the browsers that `textDocument/diagnostic` had), rewriting the text that pyright sees
+  (which moves columns), or changing pyright's checker in the bundle (fragile); none is worth it while
+  the dynamic check stays.
 * **`python/sicp`:** the type names `Pair`, `LList`, `Stream` and `Callable`, as aliases of `typing`
   (not `type` statements, because the package supports Python 3.10), so that annotated programs run
   in CPython. This also fixed a mistake in the package that typed programs show: `from sicp import *`
@@ -319,7 +325,7 @@ Generate `.pyi` stubs (`typings/<module>/__init__.pyi`) for the modules from the
 declarations in the modules repository, mapping JS types to Python ones (`number` to `float`,
 opaque module values such as `Rune` to opaque classes). Publish them with the modules, or vendor
 them into the checker's file system. As a stop-gap, hand-write stubs for `rune`, `curve`, `sound`
-and `binary_tree`. A module without a stub is typed as `Any` (pyright's own behaviour), with a
+and `binary_tree`. A module without a stub is not resolved (an error, as there is no `Any` to give its names), with a
 warning rather than an error.
 
 ### Phase 5: language directory, documentation, release (≈ 3 days)
@@ -385,7 +391,7 @@ phases 2 and 3.
 * **Message quality** decides whether students find this useful. Budget time for the rewrite table,
   and try it with students before release.
 * **SICPy §4 code** (the evaluator chapter): see "The §4 evaluator (`mce`) and heterogeneous
-  data". How many textbook programs need `Any` will show how good the type language is.
+  data". With no `Any`, the syntax types of #631 have to be enough for the evaluator chapter.
 * **Bundle and memory.** The worker is 4.7 MB (0.77 MB brotli), built into `dist/`. Memory use per
   tab is not measured; measure it in phase 3, with two workers (foreground and background
   analysis). Running analysis in the foreground worker only would remove one of them.

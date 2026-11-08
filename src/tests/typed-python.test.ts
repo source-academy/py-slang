@@ -169,6 +169,23 @@ describe("Typed Python §4 requires annotations on every def", () => {
     expect(() => prepare("x = 1\ndef f(a: int, b) -> int:\n    return a")).toThrow(/line 2/);
   });
 
+  test("types need no import: Any, Callable and the other names of typing are not imported", () => {
+    for (const code of [
+      "from typing import Any",
+      "from typing import Callable",
+      "from typing_extensions import TypeIs",
+      "from collections.abc import Callable",
+    ]) {
+      expect(() => prepare(code)).toThrow(FeatureNotSupportedError);
+      expect(() => prepare(code)).toThrow(
+        /Callable, Pair, LList and Stream are predeclared, and there is no Any/,
+      );
+    }
+    // A file of the program that is called typing, and a module of Source Academy, are not meant.
+    expect(() => prepare("from .typing import x")).not.toThrow();
+    expect(() => prepare("from rune import heart")).not.toThrow();
+  });
+
   test("a declaration without a value is rejected, one with the value None is not", () => {
     expect(() => prepare("x: int")).toThrow(FeatureNotSupportedError);
     expect(() => prepare("x: int")).toThrow(/declarations without a value/);

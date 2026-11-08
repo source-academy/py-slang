@@ -7,6 +7,7 @@
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { parse } from "../parser/parser-adapter";
+import { runCode } from "../runner";
 import { prepareTypedProgram, TypedPythonChecker, type TypeDiagnostic } from "../typecheck";
 import { CHECKER_SETUP_TIMEOUT_MS, startTypedChecker } from "./typecheck-harness";
 
@@ -78,5 +79,13 @@ describe("the type checker on programs", () => {
     expect([...errorsByLine(diagnostics).keys()]).toEqual([1, 2]);
   });
 
-  test.todo("the left operand of and/or must be a bool (`3 and 4` is not reported yet)");
+  test("the left operand of and/or is not checked statically: a limitation, in the specification", async () => {
+    // Python §4 wants a bool there. Pyright has no rule for it, and `and` does not call a method of
+    // its operand's type that could be changed (making `__bool__` an error is what makes `if 1:` an
+    // error, and it has no effect here), so there is no static error ...
+    const diagnostics = await checker.check("k = 3 and 4\nm = 'a' or 1\n");
+    expect(errorsByLine(diagnostics).size).toBe(0);
+    // ... and the engines report it when the program runs.
+    await expect(runCode("print(3 and 4)\n", 4)).rejects.toThrow();
+  });
 });
