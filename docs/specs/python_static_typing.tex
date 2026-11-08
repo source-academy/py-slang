@@ -1,0 +1,181 @@
+\section{Static Type Checking}
+
+A Typed Python \S 4 program is checked for type errors before it runs. A program with a type
+error does not run; all its type errors are reported, each with the line and column where it
+occurs. Static type checking is in addition to the dynamic type checking described in the
+section ``Dynamic Type Checking'': a program that passes the static checks can still fail at
+run time, for example when it divides by zero or accesses a list outside its range.
+
+\subsection*{Types}
+
+The following types are available without imports.
+
+\begin{center}
+  \begin{tabular}{l|p{0.62\textwidth}}
+    type & values \\ \hline
+    \texttt{int}, \texttt{float}, \texttt{complex} & numbers \\
+    \texttt{bool} & \texttt{True}, \texttt{False} \\
+    \texttt{str} & strings \\
+    \texttt{None} & \texttt{None} \\
+    \texttt{list[}$T$\texttt{]} & lists whose elements have type $T$ \\
+    \texttt{Pair[}$H$\texttt{,~}$T$\texttt{]} & pairs whose head has type $H$ and whose tail has type $T$ \\
+    \texttt{LList[}$T$\texttt{]} & linked lists of elements of type $T$:\newline
+                                    \texttt{Pair[}$T$\texttt{,~LList[}$T$\texttt{]]~|~None} \\
+    \texttt{Stream[}$T$\texttt{]} & streams of elements of type $T$:\newline
+                                     \texttt{Pair[}$T$\texttt{,~Callable[[],~Stream[}$T$\texttt{]]]~|~None} \\
+    \texttt{Callable[[}$T_1$\texttt{,~}\ldots\texttt{,~}$T_n$\texttt{],~}$R$\texttt{]}
+        & functions with $n$ parameters of types $T_1, \ldots, T_n$ that return a value of type $R$ \\
+    $T_1$~\texttt{|}~$T_2$ & values of type $T_1$ or of type $T_2$ \\
+  \end{tabular}
+\end{center}
+
+A pair is not a list as far as types are concerned, even though pairs are represented
+as lists of two elements: \texttt{pair(1,~2)[0]} is a type error, and the head and tail of a
+pair are accessed with \texttt{head} and \texttt{tail}. The elements of a list or a linked
+list all have the same type; a linked list with numbers and strings has a type such as
+\texttt{LList[int~|~str]}.
+
+\subsection*{Assignability}
+
+A value of type $S$ can be used where a value of type $T$ is expected if
+\begin{itemize}
+  \item $S$ and $T$ are the same type, or $T$ is a union that includes $S$;
+  \item $S$ is \texttt{int} and $T$ is \texttt{float} or \texttt{complex}, or $S$ is
+    \texttt{float} and $T$ is \texttt{complex};
+  \item $S$ is \texttt{None} and $T$ is \texttt{LList[}$U$\texttt{]} or \texttt{Stream[}$U$\texttt{]}
+    for any $U$;
+  \item $S$ and $T$ are function types with the same number of parameters, each
+    parameter type of $T$ can be used where the corresponding parameter type of $S$ is
+    expected, and the result type of $S$ can be used where the result type of $T$ is
+    expected.
+\end{itemize}
+In contrast to Python's usual type checkers, \texttt{bool} is not a number: \texttt{True} cannot
+be used where an \texttt{int} is expected. This follows the dynamic type checking of Python
+\S 4, where \texttt{True~+~1} is an error.
+Lists and pairs can be changed, so their element types must match exactly: a
+\texttt{list[int]} cannot be used where a \texttt{list[float]} is expected, and a
+\texttt{Pair[int,~int]} cannot be used where a \texttt{Pair[float,~float]} is expected.
+
+\subsection*{Annotations}
+
+\begin{itemize}
+  \item Every function definition annotates each of its parameters and its return type.
+    A function that does not return a value has the return type \texttt{None}.
+\begin{lstlisting}
+def length(xs: LList[int]) -> int:
+    return 0 if is_none(xs) else 1 + length(tail(xs))
+\end{lstlisting}
+  \item The parameters of a lambda expression are not annotated. Their types come from
+    where the lambda expression is used: as an argument to a function whose parameter
+    has a function type, or as the value of a name with a declared function type. A lambda
+    expression whose parameter types cannot be determined that way is a type error.
+\begin{lstlisting}
+ys = map(lambda x: x * 2, llist(1, 2, 3))      # x: int
+square: Callable[[int], int] = lambda x: x * x
+\end{lstlisting}
+  \item An assignment can declare the type of a name:
+    \lstinline{count: int = 0}. Every value that is assigned to the name, also through
+    \texttt{nonlocal} and \texttt{global}, must then have that type. A name without a
+    declared type has, at each use, the type of the value that was assigned to it last;
+    an empty list \texttt{[]} needs a declared type, such as
+    \lstinline{xs: list[int] = []}.
+\end{itemize}
+
+\subsection*{Generic functions and type aliases}
+
+A function definition can introduce type parameters, which stand for any type. At each
+call, the type parameters are replaced by the types of the arguments.
+\begin{lstlisting}
+def map_llist[A, B](f: Callable[[A], B], xs: LList[A]) -> LList[B]:
+    return None if is_none(xs) else pair(f(head(xs)), map_llist(f, tail(xs)))
+\end{lstlisting}
+A type alias gives a name to a type. Type aliases can have type parameters and can be
+recursive.
+\begin{lstlisting}
+type Rational = Pair[int, int]
+type Tree[T] = Pair[T, LList[Tree[T]]]
+\end{lstlisting}
+
+\subsection*{Conditions and narrowing}
+
+The condition after \texttt{if}, \texttt{elif} and \texttt{while}, the condition of a
+conditional expression, the operand of \texttt{not}, and the left operand of \texttt{and}
+and \texttt{or} must have the type \texttt{bool}.
+
+In the branches of a conditional statement or conditional expression, the type of a name is
+narrowed according to the condition. If \texttt{xs} has the type \texttt{LList[}$T$\texttt{]},
+it has the type \texttt{None} where \texttt{is\_none(xs)} (or \texttt{xs is None}) is
+\texttt{True}, and the type \texttt{Pair[}$T$\texttt{,~LList[}$T$\texttt{]]} where it is
+\texttt{False}, so that \texttt{head(xs)} and \texttt{tail(xs)} are allowed there. The
+functions \texttt{is\_pair}, \texttt{is\_number}, \texttt{is\_integer}, \texttt{is\_float},
+\texttt{is\_complex}, \texttt{is\_boolean}, \texttt{is\_string}, \texttt{is\_function} and
+\texttt{is\_list} narrow types in the same way.
+
+\subsection*{Operators}
+
+The types of operator combinations follow the table in the section ``Dynamic Type
+Checking'', with these additions:
+\begin{itemize}
+  \item $a$~\texttt{**}~$b$ with \texttt{int} operands has the type \texttt{int} if $b$ is a
+    non-negative integer literal, \texttt{float} if $b$ is a negative integer literal, and
+    \texttt{int~|~float} otherwise; with a \texttt{float} operand and no \texttt{complex}
+    operand, it has the type \texttt{float}.
+  \item \texttt{==}, \texttt{!=}, \texttt{is} and \texttt{is not} accept operands of any
+    types; \texttt{>}, \texttt{>=}, \texttt{<} and \texttt{<=} compare \texttt{bool} values with
+    \texttt{int} and \texttt{float} values, as in Python \S 4.
+  \item $a$~\texttt{and}~$b$ and $a$~\texttt{or}~$b$ have the type \texttt{bool~|~}$T$, where
+    $T$ is the type of $b$.
+\end{itemize}
+The right operand of \texttt{and} and \texttt{or} is deliberately not required to have the type
+\texttt{bool}. Its value is the value of the whole expression, without any further check, so
+that a function whose result is $a$~\texttt{and}~$f(\ldots)$ or $a$~\texttt{or}~$f(\ldots)$
+still gives rise to an iterative process, as in
+\begin{lstlisting}
+def is_even(n: int) -> bool:
+    return n == 0 or is_odd(n - 1)
+
+def is_odd(n: int) -> bool:
+    return n != 0 and is_even(n - 1)
+\end{lstlisting}
+Requiring the type \texttt{bool} for the right operand would add a check after the call of
+$f$, and the process would become recursive.
+
+\subsection*{Types of the predeclared functions}
+
+The predeclared functions have the following types, where $A$, $B$, $H$ and $T$ are type
+parameters.
+
+\begin{center}
+  \begin{tabular}{l}
+    \texttt{pair(h:~$H$, t:~$T$) -> Pair[$H$, $T$]} \\
+    \texttt{head(p:~Pair[$H$, $T$]) -> $H$},\quad
+    \texttt{tail(p:~Pair[$H$, $T$]) -> $T$} \\
+    \texttt{set\_head(p:~Pair[$H$, $T$], v:~$H$) -> None} \\
+    \texttt{set\_tail(p:~Pair[$H$, $T$], v:~$T$) -> None} \\
+    \texttt{llist(*xs:~$A$) -> LList[$A$]},\quad
+    \texttt{length(xs:~LList[$A$]) -> int} \\
+    \texttt{map(f:~Callable[[$A$], $B$], xs:~LList[$A$]) -> LList[$B$]} \\
+    \texttt{filter(pred:~Callable[[$A$], bool], xs:~LList[$A$]) -> LList[$A$]} \\
+    \texttt{reduce(f:~Callable[[$A$, $B$], $B$], initial:~$B$, xs:~LList[$A$]) -> $B$} \\
+    \texttt{append(xs:~LList[$A$], ys:~LList[$A$]) -> LList[$A$]} \\
+    \texttt{reverse(xs:~LList[$A$]) -> LList[$A$]} \\
+    \texttt{member(v:~$A$, xs:~LList[$A$]) -> LList[$A$]} \\
+    \texttt{llist\_ref(xs:~LList[$A$], n:~int) -> $A$} \\
+    \texttt{enum\_llist(start:~int, end:~int) -> LList[int]} \\
+    \texttt{stream\_tail(s:~Pair[$H$, Callable[[], $T$]]) -> $T$} \\
+    \texttt{stream\_map(f:~Callable[[$A$], $B$], s:~Stream[$A$]) -> Stream[$B$]} \\
+    \texttt{is\_none(x:~object) -> bool}\quad (narrows \texttt{x}; similarly the other
+    \texttt{is\_} functions) \\
+  \end{tabular}
+\end{center}
+
+The types of all predeclared functions are listed in the documentation of Typed Python \S 4.
+The types of \texttt{tokenize}, \texttt{parse} and \texttt{apply\_in\_underlying\_python}, and
+of the data that \texttt{parse} returns, are not yet fixed: they will be given as opaque
+syntax types with typed accessor functions
+(\href{https://github.com/source-academy/py-slang/issues/631}{\color{DarkBlue}py-slang issue 631}).
+
+\subsection*{Modules}
+
+Names imported from Source Academy modules have the types given in the modules'
+documentation. Names from a module without type information are not checked.
