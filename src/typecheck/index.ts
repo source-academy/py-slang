@@ -3,6 +3,11 @@ import { makeTypedChapter4Validators, traverseAST } from "../validator";
 import { eraseTypes } from "./erase";
 
 export { eraseTypes } from "./erase";
+export { TypedPythonChecker, topLevelNames } from "./checker";
+export { PyrightClient } from "./client";
+export type { LspDiagnostic, WorkerFactory, WorkerLike } from "./client";
+export { TYPED_PYTHON_4_CONFIG } from "./config";
+export type { Severity, TypeDiagnostic } from "./diagnostics";
 
 /**
  * Typed Python §4 (docs/typed-python-4.md), the part that the parser's AST takes: checks the rules
