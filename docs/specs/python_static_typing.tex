@@ -3,7 +3,7 @@
 A Typed Python \S 4 program is checked for type errors before it runs. A program with a type
 error does not run; all its type errors are reported, each with the line and column where it
 occurs. Static type checking is in addition to the dynamic type checking described in the
-section ``Dynamic Type Checking'': a program that passes the static checks can still fail at
+section ``Dynamic Type Checking'' below: a program that passes the static checks can still fail at
 run time, for example when it divides by zero or accesses a list outside its range.
 
 \subsection*{Types}
@@ -114,7 +114,7 @@ functions \texttt{is\_pair}, \texttt{is\_number}, \texttt{is\_integer}, \texttt{
 \subsection*{Operators}
 
 The types of operator combinations follow the table in the section ``Dynamic Type
-Checking'', with these additions:
+Checking'' below, with these additions:
 \begin{itemize}
   \item $a$~\texttt{**}~$b$ with \texttt{int} operands has the type \texttt{int} if $b$ is a
     non-negative integer literal, \texttt{float} if $b$ is a negative integer literal, and
