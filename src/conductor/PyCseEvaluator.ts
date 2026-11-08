@@ -16,6 +16,7 @@ import {
   displayError,
 } from "../engines/cse/streams";
 import { parse } from "../parser/parser-adapter";
+import { StaticTypeErrors } from "../typecheck/errors";
 import { analyze } from "../resolver/analysis";
 import dataVisualizer from "../stdlib/dataVisualizer";
 import linkedList from "../stdlib/linked-list";
@@ -29,6 +30,7 @@ import { Group } from "../stdlib/utils";
 import { PythonDataVisualizerRunnerPlugin } from "./dataVisualizer/PyDataVisualizerRunnerPlugin";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
+import type { BeforeValidation } from "./typed";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
 import { fetchRunConfig } from "./runConfig";
 
@@ -41,7 +43,7 @@ function once<T>(fn: () => Promise<T>): () => Promise<T> {
  * The abstract class PyCseEvaluatorBase implements the common logic for all variants of
  * the CSE evaluator, which includes setting up the context, loading preludes, and evaluating chunks of code.
  */
-abstract class PyCseEvaluatorBase extends BasicEvaluator {
+export abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private context = new Context();
   private readonly variant: number;
   private readonly groups: Group[];
@@ -57,7 +59,16 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
    * reason to register the plugin or have the host fetch its web bundle for §1 users. */
   private readonly dataVisualizerPlugin?: PythonDataVisualizerRunnerPlugin;
 
-  protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
+  /**
+   * `beforeValidation` is called with each chunk once it is parsed, before it is validated: it may
+   * throw to reject the chunk, and change the program. Typed Python §4 checks the types there.
+   */
+  protected constructor(
+    conductor: IRunnerPlugin,
+    variant: number,
+    groups: Group[],
+    private readonly beforeValidation?: BeforeValidation,
+  ) {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
@@ -105,6 +116,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
 
   async evaluateChunk(chunk: string): Promise<void> {
     const { context: stdout, flush: flushOutput } = createBufferedOutputStream();
+    const script = chunk + "\n";
     try {
       this.context.streams = {
         initialised: true,
@@ -118,8 +130,8 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       this.context.dataVisualizer = this.dataVisualizerPlugin ?? null;
       await this.ensurePreludesLoaded();
       this.dataHandler.setCurrentSource(chunk);
-      const script = chunk + "\n";
       const ast = parse(script);
+      await this.beforeValidation?.(script, ast);
       const errors = analyze(
         ast,
         script,
@@ -175,6 +187,18 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       const errors = Array.isArray(e) ? e : [e];
       await Promise.all(
         errors.map(e => {
+          if (e instanceof StaticTypeErrors) {
+            // The CSE machine has no other way to say where an error is than its message.
+            return Promise.all(
+              e.errors.map(error =>
+                displayError(
+                  this.context,
+                  { name: error.name, message: error.describe(script) },
+                  ErrorType.EVALUATOR_TYPE,
+                ),
+              ),
+            );
+          }
           if (e instanceof SyntaxError) {
             return displayError(this.context, e, ErrorType.EVALUATOR_SYNTAX);
           }
@@ -205,17 +229,20 @@ export class PyCseEvaluator3 extends PyCseEvaluatorBase {
   }
 }
 
+/** The groups of Python §4 (Typed Python §4 has them too). */
+export const CSE_GROUPS_4: Group[] = [
+  misc,
+  math,
+  linkedList,
+  list,
+  pairmutator,
+  stream,
+  parser,
+  dataVisualizer,
+];
+
 export class PyCseEvaluator4 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [
-      misc,
-      math,
-      linkedList,
-      list,
-      pairmutator,
-      stream,
-      parser,
-      dataVisualizer,
-    ]);
+    super(conductor, 4, CSE_GROUPS_4);
   }
 }

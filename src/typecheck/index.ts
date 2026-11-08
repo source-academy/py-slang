@@ -7,6 +7,10 @@ export { TypedPythonChecker, topLevelNames } from "./checker";
 export { PyrightClient } from "./client";
 export type { LspDiagnostic, WorkerFactory, WorkerLike } from "./client";
 export { TYPED_PYTHON_4_CONFIG } from "./config";
+export { LazyChecker, startBrowserChecker, TYPED_PY4_CHECKER_URL } from "./loader";
+export { StaticTypeError, StaticTypeErrors, TypeCheckerUnavailableError } from "./errors";
+export { checkTypedChunk, validateTypedProgram } from "./typed-chunk";
+export type { ChunkChecker } from "./typed-chunk";
 export type { Severity, TypeDiagnostic } from "./diagnostics";
 
 /**
