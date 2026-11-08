@@ -78,7 +78,8 @@ The ~270 ms re-check is the server's change debounce, not analysis time.
    AST fields (`RARROW` already exists in the tokenizer) and engines that ignore annotations.
 2. **Strict bool is not a pyright rule**, but our own `builtins.pyi` gets most of it
    (`patch-builtins.cjs`): `__bool__ -> None` on int/float/complex/str/list/tuple/dict gives
-   "Invalid conditional operand of type …" in if/while/ternary/`not`; `bool` not subclassing `int`
+   "Invalid conditional operand of type …" in if/while/ternary/`not` (and so does
+   `NoneType.__bool__ -> None`, patched in `types.pyi`, for `if None:`); `bool` not subclassing `int`
    rejects `True + 1` and `xs[True]`, while `bool` keeps `<`/`<=`/`>`/`>=` with numbers, which
    Python §4 allows. The same script types `**` by Python §4's operator table instead of
    typeshed's `Any`. Only use this for Source chapters, not Full Python. The left operand of

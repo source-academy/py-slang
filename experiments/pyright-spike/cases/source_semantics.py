@@ -7,3 +7,4 @@ b = True + 1                                       # S  bool is not a number in 
 c = 1 == "a"                                       # legal in py-slang too (False)
 d = not 0                                          # S  `not` on a non-bool
 e = 3 and 4                                        # S  and/or on non-bools
+f = 1 if None else 2                               # S  None is not a condition

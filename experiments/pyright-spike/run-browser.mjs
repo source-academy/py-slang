@@ -7,22 +7,25 @@ import pw from "playwright-core";
 
 const engine = process.argv[2] ?? "chromium";
 const workerPath = process.argv[3] ?? "build/worker.min.js";
+// A fixed table of the files the page needs: no path is built from the request.
+const routes = {
+  "/": ["web/index.html", "text/html"],
+  "/checker.js": ["web/checker.js", "text/javascript"],
+  "/worker.js": [workerPath, "text/javascript"],
+};
 const server = http.createServer((req, res) => {
-  const p =
-    req.url === "/" ? "web/index.html" : req.url === "/worker.js" ? workerPath : `web${req.url}`;
-  try {
-    const body = gzipSync(readFileSync(p));
-    res.writeHead(200, {
-      "content-type": p.endsWith(".html") ? "text/html" : "text/javascript",
-      "content-encoding": "gzip",
-    });
-    res.end(body);
-  } catch {
+  const route = Object.hasOwn(routes, req.url) ? routes[req.url] : undefined;
+  if (!route) {
     res.writeHead(404).end();
+    return;
   }
+  const [file, contentType] = route;
+  res.writeHead(200, { "content-type": contentType, "content-encoding": "gzip" });
+  res.end(gzipSync(readFileSync(file)));
 });
-await new Promise(r => server.listen(0, r));
-const url = `http://localhost:${server.address().port}/`;
+// Loopback only: the server is for the local browser that Playwright starts.
+await new Promise(r => server.listen(0, "127.0.0.1", r));
+const url = `http://127.0.0.1:${server.address().port}/`;
 
 const browser = await pw[engine].launch();
 const page = await browser.newPage();

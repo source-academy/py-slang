@@ -1,4 +1,4 @@
-// Derives a "Source Python" builtins.pyi from typeshed's:
+// Derives "Source Python" builtins.pyi and types.pyi from typeshed's:
 //   * int/float/complex/str/list/tuple/dict/NoneType get `__bool__(self) -> None`, so pyright reports
 //     "Invalid conditional operand" for them in if/while/ternary/not/and/or (Source's strict bool)
 //   * bool no longer subclasses int, so True + 1 is an operator error
@@ -58,3 +58,13 @@ for (const [from, to] of pow) {
 }
 fs.writeFileSync("build/builtins.source.pyi", s);
 console.log(`patched builtins.pyi (${n0} -> ${s.length} chars)`);
+
+// None is not a condition either. NoneType lives in types.pyi, and its __bool__ returns
+// Literal[False], which the __bool__ rewrite above does not match.
+let t = fs.readFileSync("build/types.orig.pyi", "utf8");
+const noneBool =
+  /(class NoneType:\r?\n(?:.*\r?\n)*?    def __bool__\(self\) -> )Literal\[False\](:)/;
+if (!noneBool.test(t)) throw new Error("missing NoneType.__bool__");
+t = t.replace(noneBool, "$1None$2");
+fs.writeFileSync("build/types.source.pyi", t);
+console.log("patched types.pyi (NoneType.__bool__)");

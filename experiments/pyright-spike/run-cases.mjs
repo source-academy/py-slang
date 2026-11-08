@@ -17,6 +17,10 @@ const checker = await createChecker({
             new URL("./build/builtins.source.pyi", import.meta.url),
             "utf8",
           ),
+          "/typeshed-fallback/stdlib/types.pyi": readFileSync(
+            new URL("./build/types.source.pyi", import.meta.url),
+            "utf8",
+          ),
         }
       : {}),
   },

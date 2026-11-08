@@ -13,7 +13,10 @@ any other Source error.
 A type-correct Typed Python §4 program, with its annotations erased, is an ordinary Python §4
 program, and it behaves exactly as one. The type checker only accepts or rejects programs; it never
 changes what they do. Annotated programs are also valid CPython 3.13, so the CPython parity harness
-still applies.
+still applies, provided the `sicp` package defines the type names as well (`Pair`, `LList`,
+`Stream`, and `Callable` re-exported from `typing`): CPython 3.13 evaluates a function's
+annotations when the `def` runs, so a program that uses `LList[int]` fails with a `NameError`
+without them. See phase 2.
 
 ## Approach: embed pyright, don't write a checker
 
@@ -133,8 +136,13 @@ frontend (unchanged)
   typing. The bundle is published as a separate file so that Python §4 users never download it.
 * **REPL chunks.** `evaluateChunk` keeps one Py2JsSession across chunks, so a later chunk can use
   names that an earlier chunk defined. The checker sees the same view: the client keeps each
-  accepted chunk as `chunk_k.py`, and the next chunk is checked with `from .chunk_k import *` for
-  every earlier k. A rejected chunk is not added.
+  accepted chunk as `chunk_k.py`, and checks the next chunk with explicit imports,
+  `from .chunk_k import a, _b, ...`, of every top-level name that an earlier chunk binds, each from
+  the last chunk that binds it (py-slang's resolver lists a chunk's top-level names).
+  `from .chunk_k import *` would not do: it skips names that start with `_`, such as `_cache`. A
+  rejected chunk is not added. Caveat: a declared type (`x: int = 0`) does not carry over to
+  assignments to `x` in later chunks, since an imported name can be rebound. If that matters, the
+  client can repeat the declaration (`x: int`) in the next chunk's header.
 * **Folder imports.** Local imports (`from .foo import x`, PR #379) map to files in the checker's
   file system. The client fetches them through the same `onRequestFile` path the engine already uses.
 * **Positions.** The program text is passed to pyright unchanged, so its 0-based line and character
@@ -196,6 +204,10 @@ Still to do: review of the rules and the specification with the SICPy authors, a
   AST that asks the checker for that operand's type (LSP hover). Defer it if it turns out to be
   costly; the dynamic check stays in any case.
 * A py-slang validator that requires a return annotation on every `def`.
+* `python/sicp`: define the type names `Pair` (a generic class), `LList`, `Stream` (PEP 695
+  `type` aliases, which CPython evaluates lazily) and `Callable`, so that annotated programs run
+  in CPython 3.13 and the parity harness covers Typed §4 programs. Students who run their programs
+  with the `sourceacademy-sicp` package at home need this too.
 * Tests: the spike corpus moved to jest (Node shim), plus annotated versions of the Python §4 test
   programs. Requirements: no false positives on correct programs, and each planted error reported
   on the right line.
