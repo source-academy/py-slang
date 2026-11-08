@@ -299,30 +299,56 @@ Done. What was built, and where it differs from the first sketch:
   of the tests is also given no `SharedArrayBuffer`, as a page that is not cross-origin isolated has
   none.
 
-### Phase 3: the evaluator (≈ 1 week)
+### Phase 3: the evaluators (≈ 1 week)
 
-* `src/conductor/TypedPy2JsEvaluator.ts`: check, then run. Built as `TypedPy2JsEvaluator4` in
-  `scripts/build.ts`, and the checker bundle is published next to it.
-* Wiring: REPL chunks, folder imports, `input()`, and modules work as in Py2JsEvaluator4.
-* Autocomplete: reuse `registerAutoCompletePlugin`. Later, pyright's own completions could be
-  offered through it.
-* Optional, later: a Typed §4 e-stepper evaluator (`PyEStepperEvaluator4` behind the same check).
+Done, for three engines. What was built, and the decisions on the way:
 
-Carried over from the first two phases:
+* **The type checker runs with whichever engine the student chooses.** `TypedPy2JsEvaluator4`,
+  `TypedPyCseEvaluator4` and `TypedPyEStepperEvaluator4` (`src/conductor/`, built as evaluators by
+  `scripts/build.ts`): each parses a chunk, checks it, and hands the engine a chunk of Python §4.
+  The engines are those of Python §4, unchanged.
+* **The check is a step of validation, but not a `FeatureValidator`.** It sits where each engine
+  already validates, right after parsing and before the engine's own checks (the Resolver in py2js,
+  `analyze` in the CSE machine, `checkEStepperProgram` in the stepper). It cannot be one of the
+  validators that the Resolver runs: those are synchronous and look at one node at a time, and the
+  checker is asynchronous (a worker), looks at the whole text, and keeps what it has seen from chunk
+  to chunk. The rules of Typed §4 on annotations (`makeTypedChapter4Validators`) are validators, and
+  they run first. Each engine takes the step as an option, `beforeValidation` (the session of py2js,
+  the base classes of the CSE machine and the stepper), which is called with the text and the parsed
+  program of each chunk (never with a group's prelude, which is Python §4 already), may throw, and
+  may change the program; `checkTypedChunk` is the one function that all three call.
+* **In order**: the rules of Typed §4 on annotations (the first violation is reported); the checker,
+  with the text as written (all its errors are reported, with line and column; warnings and hints
+  do not stop a program); the erasure of the types; then the engine's own validation, which rejects
+  the names that §4 lacks. A program that is not checked is not run: if the checker cannot be
+  started (a network error), the chunk is rejected with that said, and the next run tries again.
+* **Reporting.** py2js and the stepper send each error with its `line` and `column` and the type
+  `EVALUATOR_TYPE`; the CSE machine can say where an error is only in its message, so a type error
+  there has the line of the program and what is wrong marked, as its other errors do. Program texts
+  are the student's, with the annotations: the engines' error spans and the stepper's text are of
+  the typed text, because erasing a type removes nodes and moves none.
+* **Starting the checker.** `LazyChecker` fetches `TypedPy4Checker.js` (published next to the
+  evaluators) and starts it as a worker from a `blob:` URL when it is first needed, and starts that
+  at once when the evaluator is made, so that it loads while the student types. It was tried in
+  Chromium, Firefox and WebKit from inside a web worker that was itself started from a `blob:` URL,
+  with the script on another origin: it works, and the first check, with the fetch, takes 400–600
+  ms. `yarn build` builds the checker (`yarn build:typecheck`), and what `yarn build --all` makes is
+  what is deployed.
+* **Tests**: `typecheck-evaluator.test.ts` (py2js: running, every error, the rules, REPL chunks, a
+  file, hints, run-time errors, a checker that cannot be started) and `typecheck-engines.test.ts`
+  (the CSE machine and the stepper: running or stepping, the message and the line and column of an
+  error, every error, REPL chunks, the erased program that the stepper gets).
+* **Not done**: autocomplete from pyright; and local imports (`from .foo import x`) are checked as
+  the flattened text that py2js makes of them, so a type error in an imported file is reported with
+  a line of that text, as the other errors of such a program are. Both could be better later.
 
-* A hook after parsing, for `prepareTypedProgram` (phase 1).
-* The order of the checks: the typed rules (`prepareTypedProgram`), the Resolver (names, which
-  rejects what §4 lacks) and the type checker. The first two are quick and give the errors that a
-  student should fix first; the checker needs the text as written, with its annotations.
-* Starting the checker: the evaluator fetches `TypedPy4Checker.js` from where the evaluators are
-  published, starts it from a `blob:` URL (`new Worker(url)` with the factory of a browser), and
-  starts it lazily, so that it loads while the student types. `yarn build:typecheck` has to be part
-  of `yarn build` and of what is deployed.
+Carried over to the later phases:
+
 * A program that imports a Source Academy module (`from rune import heart`) is an error for the
   checker until the module has a stub (phase 4): pyright cannot resolve the import. Phase 4 comes
   before the language is released.
-* The messages of the checker are errors with a line and a column: how the frontend shows them (as
-  the errors of `conductor.sendError`, with `line` and `column`) is part of this phase.
+* The language-directory entry (phase 5) lists the three evaluators of the language: py2js, the CSE
+  machine (capability `CSE`) and the environment stepper (capability `E_STEPPER`).
 
 ### Phase 4: Source Academy module stubs (≈ 1 week)
 
