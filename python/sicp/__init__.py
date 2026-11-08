@@ -16,6 +16,7 @@ The library is assembled from submodules, each mirroring a group in
     sicp.list          list.ts          is_list, equal
     sicp.stream        stream.ts        stream, stream_map, integers_from, ...
     sicp.mce           (mce group)      apply_in_underlying_python
+    sicp.annotations   (prelude.pyi)    Pair, LList, Stream, Callable: for type annotations
 
 Representation note: a linked-list pair is a two-element Python list
 ``[head, tail]`` and the empty list is ``None``, matching Source Academy Python.
@@ -36,3 +37,15 @@ from .pair_mutators import *  # noqa: F401,F403
 from .list import *  # noqa: F401,F403
 from .stream import *  # noqa: F401,F403
 from .mce import *  # noqa: F401,F403
+from .annotations import *  # noqa: F401,F403
+
+# `from sicp import *` must not export the submodules: without `__all__` it would, and
+# `sicp.list` (a module) would shadow Python's own `list`, so that `list[int]` in an annotation, or a
+# call of `list(...)`, fails with "'module' object is not subscriptable". Likewise `math`.
+import types as _types
+
+__all__ = [
+    name
+    for name, value in tuple(globals().items())
+    if not name.startswith("_") and not isinstance(value, _types.ModuleType)
+]
