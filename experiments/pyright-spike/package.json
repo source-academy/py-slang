@@ -1,0 +1,19 @@
+{
+  "name": "pyright-spike",
+  "private": true,
+  "description": "Spike: pyright (browser-basedpyright) as a type checker for Source Python",
+  "scripts": {
+    "build": "mkdir -p build && node closure.cjs builtins typing typing_extensions _typeshed types collections.abc > build/keep.txt && node trim.cjs build/worker.nostubs.js && node trim.cjs build/worker.min.js build/keep.txt && node extract-builtins.cjs && node patch-builtins.cjs",
+    "cases": "PYRIGHT_WORKER=build/worker.min.js node run-cases.mjs",
+    "cases:source": "SOURCE_BUILTINS=1 PYRIGHT_WORKER=build/worker.min.js node run-cases.mjs",
+    "browser": "node run-browser.mjs",
+    "cases:typed": "SOURCE_BUILTINS=1 PYRIGHT_WORKER=build/worker.min.js CONFIG='{\"reportMissingParameterType\":\"error\",\"reportUnknownLambdaType\":\"error\",\"reportUnknownParameterType\":\"error\",\"reportUnknownVariableType\":\"error\",\"reportUnknownArgumentType\":\"error\",\"reportUnknownMemberType\":\"error\"}' node run-cases.mjs"
+  },
+  "dependencies": {
+    "browser-basedpyright": "1.40.2"
+  },
+  "devDependencies": {
+    "acorn": "^8.19.0",
+    "playwright-core": "1.63.0"
+  }
+}
