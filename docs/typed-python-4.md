@@ -106,7 +106,7 @@ SICPy §4 represents programs as tagged linked lists, e.g. `llist("application",
 3. A recursive union alias for parse results.
 
 **Decision: option 2.** The design of the syntax types and their accessors is a separate follow-up,
-#ISSUE_MCE; until it is done, the specification leaves the types of `tokenize`, `parse` and
+#631; until it is done, the specification leaves the types of `tokenize`, `parse` and
 `apply_in_underlying_python` open.
 
 ## Architecture
@@ -151,7 +151,7 @@ Output: this document, revised and merged, and a draft of the Typed Python §4 s
 Done so far:
 
 * The rules table, decided except where marked *proposed*. The §4 evaluator question: opaque
-  syntax types (option 2), designed separately in #ISSUE_MCE.
+  syntax types (option 2), designed separately in #631.
 * Specification draft: `docs/specs/python_4_typed.tex`, built with `make python_4_typed.pdf` in
   `docs/specs`. It is Python §4's specification with the grammar of annotations, type parameters,
   `type` aliases and types (`python_4_typed_bnf.tex`), and a new section "Static Type Checking"
@@ -257,7 +257,7 @@ warning rather than an error.
 * **Squiggles while typing.** This needs a conductor feature that sends diagnostics to the host
   without running the program, and a frontend editor plugin. The checker already supports it;
   frontend and conductor work is needed.
-* **Full Python with types**: #ISSUE_FULL. Use the full typeshed bundle and CPython's builtins,
+* **Full Python with types**: #632. Use the full typeshed bundle and CPython's builtins,
   together with the Pyodide evaluator.
 
 Typed Python §1–§3 are not planned.
