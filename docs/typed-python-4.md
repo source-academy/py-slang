@@ -137,14 +137,9 @@ frontend (unchanged)
   same blob. Fetching begins when the evaluator starts, so the download overlaps with the student
   typing. The bundle is published as a separate file so that Python §4 users never download it.
 * **REPL chunks.** `evaluateChunk` keeps one Py2JsSession across chunks, so a later chunk can use
-  names that an earlier chunk defined. The checker sees the same view: the client keeps each
-  accepted chunk as `chunk_k.py`, and checks the next chunk with explicit imports,
-  `from .chunk_k import a, _b, ...`, of every top-level name that an earlier chunk binds, each from
-  the last chunk that binds it (py-slang's resolver lists a chunk's top-level names).
-  `from .chunk_k import *` would not do: it skips names that start with `_`, such as `_cache`. A
-  rejected chunk is not added. Caveat: a declared type (`x: int = 0`) does not carry over to
-  assignments to `x` in later chunks, since an imported name can be rebound. If that matters, the
-  client can repeat the declaration (`x: int`) in the next chunk's header.
+  names that an earlier chunk defined. The checker sees the same view: `checkChunk` checks each
+  accepted chunk as a file of its own, with imports of the names of the earlier ones (phase 2 has
+  the details). A rejected chunk is not added.
 * **Folder imports.** Local imports (`from .foo import x`, PR #379) map to files in the checker's
   file system. The client fetches them through the same `onRequestFile` path the engine already uses.
 * **Positions.** The program text is passed to pyright unchanged, so its 0-based line and character
@@ -212,32 +207,86 @@ program), and that is the first thing to design in phase 3.
 
 ### Phase 2: the checker package `src/typecheck/` (≈ 1.5 weeks)
 
-* `scripts/build-typecheck.ts`: from a pinned `browser-basedpyright` version, build the trimmed
-  bundle (the spike's [`trim.cjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/trim.cjs) and [`closure.cjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/closure.cjs)) and the
-  Source `builtins.pyi` and `types.pyi` ([`patch-builtins.cjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/patch-builtins.cjs),
-  extended to remove builtins that Python §4 lacks). Both are build artifacts, not checked in.
-* `src/typecheck/prelude.pyi`: the Source prelude stub (starting from the spike's
-  [`__builtins__.pyi`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/prelude/__builtins__.pyi)), covering all of `linked-list`, `list`,
-  `misc`, `math`, `pairmutator`, `stream` and `mce`. Use readable type-variable names (`H`, `T`,
-  `A`, `B`) so messages don't show `_H@head`. Add a completeness test: every builtin that §4
-  provides (from the stdlib groups) has a stub.
-* `src/typecheck/client.ts`: the worker host from the spike ([`client.mjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/client.mjs) for Node,
-  [`web/checker.js`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/web/checker.js) for browsers), plus the blob-URL loading, chunk
-  accumulation, a timeout, and a `check(files): Diagnostic[]` API.
-* Diagnostics: translate pyright messages into Source-style ones where they leak internals (for
-  example, show `LList[int]` instead of the expanded `Pair[int, LList] | None`, and drop
-  "Type parameter is invariant" lines). This is a table of rewrites, tested against a corpus.
-* The `and`/`or` strict-bool rule: the left operand must be a `bool`. A py-slang pass over the
-  AST that asks the checker for that operand's type (LSP hover). Defer it if it turns out to be
-  costly; the dynamic check stays in any case.
-* A py-slang validator that requires a return annotation on every `def`.
-* `python/sicp`: define the type names `Pair` (a generic class), `LList`, `Stream` (PEP 695
-  `type` aliases, which CPython evaluates lazily) and `Callable`, so that annotated programs run
-  in CPython 3.13 and the parity harness covers Typed §4 programs. Students who run their programs
-  with the `sourceacademy-sicp` package at home need this too.
-* Tests: the spike's [corpus](https://github.com/source-academy/py-slang/tree/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/cases) moved to jest (Node shim), plus annotated versions of the Python §4 test
-  programs. Requirements: no false positives on correct programs, and each planted error reported
-  on the right line.
+Done. What was built, and where it differs from the first sketch:
+
+* **Build** (`scripts/build-typecheck.ts`, `yarn build:typecheck`; the code is in
+  `src/typecheck/bundler/`): `dist/TypedPy4Checker.js`, 4.7 MB (1.0 MB gzip, 0.77 MB brotli), one
+  self-contained file. It is pyright's worker with the third-party stubs and all but 59 standard
+  library stubs removed, and with Source Python's `builtins.pyi` and `types.pyi`, the prelude and the
+  configuration baked in: a host starts it and sends programs, and there is nothing else to load.
+  `browser-basedpyright` is pinned (1.40.2) as a dev dependency; its polyfill dependencies add
+  about 90 packages to `yarn.lock`, which the worker does not need. Each change to typeshed's files
+  checks that typeshed has the shape that it expects, and fails the build, saying what to update, if
+  a newer typeshed does not. The worker is rebuilt when one of its sources changes (a stamp at the
+  end of the file); the tests build it when needed, and a lock lets test files that run at the same
+  time wait for one build.
+* **No removal of builtins.** The sketch had the Source `builtins.pyi` lose the builtins that §4
+  lacks. That is not needed: the Resolver rejects a name that §4 does not have, so a program that
+  uses `sorted` is rejected whether or not the checker knows it. (Which comes first, the Resolver
+  or the checker, is for phase 3.)
+* **Prelude** (`src/typecheck/prelude.pyi`): every name of §4 but `tokenize`, `parse` and
+  `apply_in_underlying_python`, whose types wait for #631. The names that typeshed has (`print`,
+  `len`, `abs`, `max`, `min`, `round`, `input`, `repr`, `str`, `complex`) keep its types. The
+  functions are generic in the PEP 695 form, so that messages say `H@head` and not `_H@head`;
+  `Pair` is a classic class with invariant type parameters (PEP 695 would infer the variance).
+  A test checks that every name of §4 is known to the checker and that the prelude declares no name
+  that §4 lacks.
+* **Client** (`client.ts`, `checker.ts`): `PyrightClient` speaks the language server protocol with
+  the worker (it boots the worker and starts the second worker that pyright asks for);
+  `TypedPythonChecker` has `check(source)` for a program and `checkChunk(source)` for a REPL chunk,
+  and returns `TypeDiagnostic`s: line from 1 and column from 0, severity, the message for the
+  student, the rule, and pyright's own message. A browser starts the worker with `new Worker(url)`;
+  Node (the tests, a command line) with `nodeWorkerFactory`. Two things differ from the spike. A
+  file that is checked again is closed and opened, which takes 10–25 ms, and not changed, which makes
+  the server wait a quarter of a second. And the answer for a file is found from what the server
+  publishes: it publishes a file more than once in an analysis, first what it has found so far
+  (a file that imports another can have no errors yet) and, when the analysis has ended
+  (`pyright/endProgress`), the final diagnostics, so the answer is the publication for the file's
+  version that comes while no analysis is running, after one has ended since the file was sent. (The
+  other way, asking for the diagnostics with `textDocument/diagnostic`, works under Node, but in
+  Chromium, Firefox and WebKit the server did not answer; the cause was not found.) Checks run one at
+  a time and time out after 30 s.
+* **REPL chunks** (`checkChunk`): as sketched, a file for each chunk with imports of the names of
+  the earlier ones, and a better result than the caveat of the sketch: the functions and types that a
+  chunk defines are not imported (the old one would win in later chunks), a variable that a chunk
+  only assigns is (`count = count + 1`), a declared type carries over (the old value is imported
+  under a private name and the variable is declared again with the same annotation, so that
+  `count = "many"` is an error), and names that start with an underscore, type aliases, loop
+  variables and `global` names work. Lines in diagnostics are lines of the chunk.
+* **Messages** (`messages.ts`, `diagnostics.ts`): `Literal['five']` is shown as `str`; `H@head` as
+  `H`; `Pair[int, LList] | None` as `LList[int]`; the second line of detail is left out; and the
+  mistakes that students make most have messages of their own (a wrong argument, `if 1:`,
+  indexing a pair, a type that cannot be determined), with a hint when the value can be `None`
+  (`head(xs)` for a linked list: "test for that first, for example with is_none(...)"). The unknown
+  types that follow from another mistake on the same line are left out. Each rewrite has an example
+  in `src/tests/typecheck-messages.test.ts`.
+* **Configuration** (`config.ts`): `standard` mode, the unknown-type rules as errors,
+  `reportRedeclaration` off (a name can be defined again in §3 and §4) and `reportUnusedExpression`
+  off (`1 + 2` in a REPL).
+* **Not done:** the rule that the left operand of `and` and `or` must be a `bool` (pyright does not
+  check it; `3 and 4` is accepted: a `test.todo`). The dynamic check stays. Deferred, as the sketch
+  allowed.
+* **`python/sicp`:** the type names `Pair`, `LList`, `Stream` and `Callable`, as aliases of `typing`
+  (not `type` statements, because the package supports Python 3.10), so that annotated programs run
+  in CPython. This also fixed a mistake in the package that typed programs show: `from sicp import *`
+  bound `list` and `math` to the package's submodules, which hid Python's own `list` (`list[int]`
+  failed); the package now has an `__all__`. The version of the package is not changed here: a
+  release is a separate decision.
+* **Tests:** `src/tests/typecheck-*.test.ts`. Programs in `src/tests/typecheck-cases/` (a line that
+  ends with `# ERROR: text` must have an error with that text, the other lines none): errors,
+  the rules of §4 that differ from Python, unknown types, `**`, and eight correct programs of
+  the kind that SICP has (recursion, linked lists, streams, higher-order functions, sorting, state)
+  with no false positive. The correct programs also satisfy the typed rules of py-slang, run on the
+  CSE machine and py2js with the same output, and with `CPYTHON_PATH` set (Python 3.12 or later)
+  print the same under CPython.
+
+  The browsers are not part of the tests (that needs Playwright). They were tried by hand, with the
+  client bundled as an evaluator would be and the worker started with `new Worker(url)`: Chromium
+  153, Firefox 155 and WebKit 26.6 give the same diagnostics and chunks as Node, with the worker
+  starting in 160–230 ms, the first check taking 250–365 ms and the next ones 10–25 ms. That check
+  found that asking for diagnostics (see the client) does not work in a browser; the Node host
+  of the tests is also given no `SharedArrayBuffer`, as a page that is not cross-origin isolated has
+  none.
 
 ### Phase 3: the evaluator (≈ 1 week)
 
@@ -247,6 +296,22 @@ program), and that is the first thing to design in phase 3.
 * Autocomplete: reuse `registerAutoCompletePlugin`. Later, pyright's own completions could be
   offered through it.
 * Optional, later: a Typed §4 e-stepper evaluator (`PyEStepperEvaluator4` behind the same check).
+
+Carried over from the first two phases:
+
+* A hook after parsing, for `prepareTypedProgram` (phase 1).
+* The order of the checks: the typed rules (`prepareTypedProgram`), the Resolver (names, which
+  rejects what §4 lacks) and the type checker. The first two are quick and give the errors that a
+  student should fix first; the checker needs the text as written, with its annotations.
+* Starting the checker: the evaluator fetches `TypedPy4Checker.js` from where the evaluators are
+  published, starts it from a `blob:` URL (`new Worker(url)` with the factory of a browser), and
+  starts it lazily, so that it loads while the student types. `yarn build:typecheck` has to be part
+  of `yarn build` and of what is deployed.
+* A program that imports a Source Academy module (`from rune import heart`) is an error for the
+  checker until the module has a stub (phase 4): pyright cannot resolve the import. Phase 4 comes
+  before the language is released.
+* The messages of the checker are errors with a line and a column: how the frontend shows them (as
+  the errors of `conductor.sendError`, with `line` and `column`) is part of this phase.
 
 ### Phase 4: Source Academy module stubs (≈ 1 week)
 
@@ -321,10 +386,12 @@ phases 2 and 3.
   and try it with students before release.
 * **SICPy §4 code** (the evaluator chapter): see "The §4 evaluator (`mce`) and heterogeneous
   data". How many textbook programs need `Any` will show how good the type language is.
-* **Bundle and memory.** 0.77 MB brotli is measured. Memory use per tab is not; measure it in
-  phase 3, with two workers (foreground and background analysis). Running analysis in the
-  foreground worker only would remove one of them.
+* **Bundle and memory.** The worker is 4.7 MB (0.77 MB brotli), built into `dist/`. Memory use per
+  tab is not measured; measure it in phase 3, with two workers (foreground and background
+  analysis). Running analysis in the foreground worker only would remove one of them.
 * **Semantic drift between pyright and py-slang.** Pyright models CPython. Where py-slang differs
   (strict bool, missing builtins, number semantics), the Source `builtins.pyi` must follow
-  py-slang. Add a test that runs every checked corpus program on py2js, so that a program the
-  checker accepts never fails at run time with a type error the checker could have caught.
+  py-slang. `src/tests/typecheck-run.test.ts` runs every correct program of the corpus on the CSE
+  machine and py2js (and, with `CPYTHON_PATH`, under CPython), so that a program that the checker
+  accepts does not fail at run time with an error that the types should have prevented. The corpus
+  has to grow with the language.
