@@ -75,16 +75,16 @@ export class PyrightClient {
     string,
     {
       version: number;
-      /** How many analyses had ended when the file was sent. */
-      endedBefore: number;
+      /** The latest diagnostics that the server published for this version of the file. */
+      latest?: LspDiagnostic[];
+      /** Whether we are waiting for the answer to the request that follows the last publication. */
+      flushing: boolean;
       resolve(diagnostics: LspDiagnostic[]): void;
       reject(error: Error): void;
     }
   >();
   /** Whether the server is analyzing (between `pyright/beginProgress` and `pyright/endProgress`). */
   private analyzing = false;
-  /** How many analyses have ended. */
-  private ended = 0;
   private readonly workers: WorkerLike[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private disposed = false;
@@ -159,7 +159,7 @@ export class PyrightClient {
       }, timeoutMs);
       this.waiting.set(uri, {
         version,
-        endedBefore: this.ended,
+        flushing: false,
         resolve: diagnostics => {
           clearTimeout(timer);
           this.waiting.delete(uri);
@@ -228,7 +228,7 @@ export class PyrightClient {
     }
     if (message.method === "pyright/endProgress") {
       this.analyzing = false;
-      this.ended++;
+      for (const waiting of [...this.waiting.entries()]) this.flush(...waiting);
       return;
     }
     if (message.method === "textDocument/publishDiagnostics") {
@@ -255,18 +255,43 @@ export class PyrightClient {
   }
 
   /**
-   * The server publishes the diagnostics of a file when it has analyzed it, more than once: in an
-   * analysis it first publishes what it has found so far (a file that imports another may have no
-   * error yet), and when the analysis has ended, the final diagnostics. So the answer for a file
-   * is the publication for its version that comes while no analysis is running, after one has
-   * ended since the file was sent. (The publication with no version, which clears a file that
-   * was closed, is not an answer.)
+   * The server analyzes in batches and publishes the diagnostics of the files of each batch, so a file
+   * can be published more than once: what it has found so far, which can be wrong (a file that imports
+   * another has no errors yet, or the other has changed since), and again when the files that it
+   * depends on are done. Which publication is the last depends on how the batches fall, which depends
+   * on how fast the processor is. What is known is that the server has no more to analyze when it
+   * ends the analysis (`pyright/endProgress`), and that it sends what it publishes at the end in the
+   * same turn. So the answer is the latest publication for the version of the file once the analysis
+   * has ended and the server has answered a request that we sent after that: the server handles what
+   * it receives one at a time, and what it sends arrives in the order that it was sent.
+   * (The publication with no version, which clears a file that was closed, is not an answer.)
    */
   private published({ uri, version, diagnostics }: PublishDiagnostics): void {
     const waiting = this.waiting.get(uri);
     if (!waiting || version !== waiting.version) return;
-    if (this.analyzing || this.ended <= waiting.endedBefore) return;
-    waiting.resolve(diagnostics);
+    waiting.latest = diagnostics;
+    this.flush(uri, waiting);
+  }
+
+  /** Ask the server for something, when it is not analyzing and we have a publication: see {@link published}. */
+  private flush(
+    uri: string,
+    waiting: { latest?: LspDiagnostic[]; flushing: boolean; resolve(d: LspDiagnostic[]): void },
+  ): void {
+    if (this.analyzing || waiting.latest === undefined || waiting.flushing) return;
+    waiting.flushing = true;
+    const answered = () => {
+      waiting.flushing = false;
+      // A new analysis may have begun since: then it ends with the final publication, which comes
+      // after this one.
+      if (this.analyzing || waiting.latest === undefined) return;
+      if (this.waiting.get(uri) === waiting) waiting.resolve(waiting.latest);
+    };
+    // Any answer will do, also the error for a command that does not exist.
+    this.request("workspace/executeCommand", { command: "py-slang.barrier", arguments: [] }).then(
+      answered,
+      answered,
+    );
   }
 
   private fail(error: Error): void {

@@ -239,12 +239,17 @@ Done. What was built, and where it differs from the first sketch:
   Node (the tests, a command line) with `nodeWorkerFactory`. Two things differ from the spike. A
   file that is checked again is closed and opened, which takes 10–25 ms, and not changed, which makes
   the server wait a quarter of a second. And the answer for a file is found from what the server
-  publishes: it publishes a file more than once in an analysis, first what it has found so far
-  (a file that imports another can have no errors yet) and, when the analysis has ended
-  (`pyright/endProgress`), the final diagnostics, so the answer is the publication for the file's
-  version that comes while no analysis is running, after one has ended since the file was sent. (The
-  other way, asking for the diagnostics with `textDocument/diagnostic`, works under Node, but in
-  Chromium, Firefox and WebKit the server did not answer; the cause was not found.) Checks run one at
+  publishes. The server analyzes in batches and publishes the files of each batch, so a file can be
+  published once, before the end of the analysis, or first with what it has found so far and again
+  after the end (`pyright/endProgress`), and which of the two happens depends on how fast the
+  processor is: a first version of the client expected the second, and hung on the busy runner of
+  CI. What is certain is that the server sends what it publishes at the end in the same turn as the
+  end, and that it handles what it receives one at a time, in order. So the answer is the latest
+  publication for the version of the file once the analysis has ended and the server has answered a
+  request that was sent after the end (any request: it is a barrier). `src/tests/typecheck-protocol.test.ts`
+  plays each order of messages with a scripted server. (The other way, asking for the diagnostics
+  with `textDocument/diagnostic`, works under Node, but in Chromium, Firefox and WebKit the server
+  did not answer; the cause was not found.) Checks run one at
   a time and time out after 30 s.
 * **REPL chunks** (`checkChunk`): as sketched, a file for each chunk with imports of the names of
   the earlier ones, and a better result than the caveat of the sketch: the functions and types that a

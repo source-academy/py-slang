@@ -23,4 +23,5 @@ def fixed_point(f: Callable[[float], float], first_guess: float) -> float:
 print(accumulate(lambda x, y: x + y, 0, llist(1, 2, 3)))
 print(repeated(lambda x: x * x, 2)(5))
 print(sum_term(lambda x: 1 / x, 1, lambda x: x + 1, 10))
-print(fixed_point(lambda x: math_cos(x), 1.0))
+# Rounded: the last digit of cos is not the same in every maths library (glibc, V8).
+print(round(fixed_point(lambda x: math_cos(x), 1.0), 6))
