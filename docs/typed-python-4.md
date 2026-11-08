@@ -122,7 +122,7 @@ frontend (unchanged)
        ├─ py-slang parse + Python §4 validators            (annotations allowed)
        ├─ Typed Python checker client  ──postMessage──►  checker worker (pyright, ~4.7 MB, lazy)
        │     file system = Source builtins.pyi + prelude      └─ background analysis worker
-       │                   + module stubs + program files
+       │                   + stubs of the imported modules + program files
        └─ on no errors: Py2JsSession(variant 4) runs the program (annotations ignored)
 ```
 
@@ -318,20 +318,42 @@ Carried over from the first two phases:
   published, starts it from a `blob:` URL (`new Worker(url)` with the factory of a browser), and
   starts it lazily, so that it loads while the student types. `yarn build:typecheck` has to be part
   of `yarn build` and of what is deployed.
-* A program that imports a Source Academy module (`from rune import heart`) is an error for the
-  checker until the module has a stub (phase 4): pyright cannot resolve the import. Phase 4 comes
-  before the language is released.
+* A program that imports a Source Academy module (`from rune import show`) is an error for the
+  checker until the module has a description of its types (phase 4): pyright cannot resolve the
+  import. Phase 4 comes before the language is released.
 * The messages of the checker are errors with a line and a column: how the frontend shows them (as
   the errors of `conductor.sendError`, with `line` and `column`) is part of this phase.
 
-### Phase 4: Source Academy module stubs (≈ 1 week)
+### Phase 4: the types of the Source Academy modules (≈ 1 week, and more as modules are described)
 
-Generate `.pyi` stubs (`typings/<module>/__init__.pyi`) for the modules from their TypeScript
-declarations in the modules repository, mapping JS types to Python ones (`number` to `float`,
-opaque module values such as `Rune` to opaque classes). Publish them with the modules, or vendor
-them into the checker's file system. As a stop-gap, hand-write stubs for `rune`, `curve`, `sound`
-and `binary_tree`. A module without a stub is not resolved: the import is an error, as there is no `Any` to give its
-names a type.
+The problem: a program that imports a module (`from rune import show`) cannot be checked, because
+the module is loaded at run time and the checker sees only the text. Today such a program is rejected.
+
+The decision: **modules are language-agnostic, so their types are described once, in a language-neutral
+form, and each typed language maps that description to its own types.** The alternative, a stub file
+for each module in each typed language, grows with modules × languages and drifts from the modules.
+The design question is open in [source-academy/modules#996](https://github.com/source-academy/modules/issues/996).
+
+* **The description** (in the `modules` repository, published with each version of a module, next to
+  its manifest): for each export, its name and type, in the conductor's `DataType` vocabulary
+  (`void`, `boolean`, `number`, `integer`, `string`, `pair`, `list`, `array`, `closure`, `opaque`)
+  extended with what the vocabulary lacks: named opaque types (a rune is not a curve), function types
+  (so that a callback is described), and the element types of lists, pairs and arrays. A conductor
+  module already declares a `{ args, returnType }` signature for each method
+  (`attachModuleMethod`), so a description can be generated from those and made more precise by
+  hand; a consumer cannot read these signatures today.
+* **The mapper** (py-slang, `src/typecheck/`): turns a description into the text of a Python stub:
+  an opaque type is a class, a function type is `Callable`, a list is `LList[T]`, a pair is
+  `Pair[A, B]`, an array is `list[T]`, `number` is `float` and `integer` is `int` (an `int` is
+  accepted where a `float` is wanted). The stub is a file of the checker's file system, for each
+  module that a program imports (`checker.ts` already has files for the chunks of a session).
+* **Loading**: before a chunk is checked, the evaluator fetches the description of each module that it
+  imports, as it fetches the module, and gives the stubs to the checker. A module with no description
+  is an error (there is no `Any` to give its names a type).
+* **Until descriptions exist**: a few hand-written stubs for the most used modules (`rune`, `curve`,
+  `sound`, `binary_tree`), in py-slang and marked as temporary, removed as the descriptions arrive.
+* **Open**, and for the issue above: the format and who defines it (the modules or the conductor);
+  whether `DataType` itself gets the new distinctions; versioning; and how much can be generated.
 
 ### Phase 5: language directory, documentation, release (≈ 3 days)
 
