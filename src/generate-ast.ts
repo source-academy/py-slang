@@ -141,7 +141,12 @@ export class AstWriter {
       "If         -> condition: ExprNS.Expr, body: Stmt[], elseBlock: Stmt[] | null",
       "While      -> condition: ExprNS.Expr, body: Stmt[]",
       "For        -> target: Token, iter: ExprNS.Expr, body: Stmt[]",
-      "FunctionDef -> name: Token, parameters: FunctionParam[], body: Stmt[], varDecls: Token[]",
+      // `returns` is the annotation after `->`, and `typeParams` the names of `def f[A, B](...)`: only the typed
+      // sublanguages allow them (see src/typecheck/).
+      "FunctionDef -> name: Token, parameters: FunctionParam[], body: Stmt[], varDecls: Token[], returns: ExprNS.Expr | null, typeParams: Token[]",
+      // `type Name[A, B] = value`: a type alias. Only the typed sublanguages allow it, and it is erased
+      // before the program runs (see src/typecheck/erase.ts).
+      "TypeAlias  -> name: Token, typeParams: Token[], value: ExprNS.Expr",
       "SimpleExpr  -> expression: ExprNS.Expr",
       // Mainly two types of input - file and interactive (repl)
       "FileInput   -> statements: Stmt[], varDecls: Token[]",

@@ -7,6 +7,8 @@ export type FunctionParam = Token & {
   isDoubleStarred?: boolean;
   trailingComma?: boolean;
   default?: ExprNS.Expr;
+  /** The annotation of a `def` parameter (`x: int`); only the typed sublanguages allow it. */
+  annotation?: ExprNS.Expr;
 };
 export type AssignTarget = ExprNS.Variable | ExprNS.Subscript;
 export namespace ExprNS {
@@ -453,6 +455,7 @@ export namespace StmtNS {
     visitWhileStmt(stmt: While): T;
     visitForStmt(stmt: For): T;
     visitFunctionDefStmt(stmt: FunctionDef): T;
+    visitTypeAliasStmt(stmt: TypeAlias): T;
     visitSimpleExprStmt(stmt: SimpleExpr): T;
     visitFileInputStmt(stmt: FileInput): T;
   }
@@ -844,6 +847,8 @@ export namespace StmtNS {
     parameters: FunctionParam[];
     body: Stmt[];
     varDecls: Token[];
+    returns: ExprNS.Expr | null;
+    typeParams: Token[];
     constructor(
       startToken: Token,
       endToken: Token,
@@ -851,15 +856,40 @@ export namespace StmtNS {
       parameters: FunctionParam[],
       body: Stmt[],
       varDecls: Token[],
+      returns: ExprNS.Expr | null,
+      typeParams: Token[],
     ) {
       super(startToken, endToken);
       this.name = name;
       this.parameters = parameters;
       this.body = body;
       this.varDecls = varDecls;
+      this.returns = returns;
+      this.typeParams = typeParams;
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitFunctionDefStmt(this);
+    }
+  }
+  export class TypeAlias extends Stmt {
+    readonly kind = "TypeAlias";
+    name: Token;
+    typeParams: Token[];
+    value: ExprNS.Expr;
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      name: Token,
+      typeParams: Token[],
+      value: ExprNS.Expr,
+    ) {
+      super(startToken, endToken);
+      this.name = name;
+      this.typeParams = typeParams;
+      this.value = value;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitTypeAliasStmt(this);
     }
   }
   export class SimpleExpr extends Stmt {

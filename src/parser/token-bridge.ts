@@ -82,6 +82,7 @@ const MOO_TO_TOKEN_TYPE: Record<string, TokenType> = {
   colon: TokenType.COLON,
   comma: TokenType.COMMA,
   plus: TokenType.PLUS,
+  rarrow: TokenType.RARROW,
   minus: TokenType.MINUS,
   star: TokenType.STAR,
   slash: TokenType.SLASH,
@@ -121,6 +122,13 @@ export function toFunctionParam(
   isStarred: boolean,
   defaultValue?: ExprNS.Expr,
   isDoubleStarred = false,
+  annotation?: ExprNS.Expr,
 ): FunctionParam {
-  return Object.assign(toAstToken(mooToken), { isStarred, default: defaultValue, isDoubleStarred });
+  const param = Object.assign(toAstToken(mooToken), {
+    isStarred,
+    default: defaultValue,
+    isDoubleStarred,
+  });
+  // Only an annotated parameter has the field, so that unannotated parameters stay as they were.
+  return annotation ? Object.assign(param, { annotation }) : param;
 }

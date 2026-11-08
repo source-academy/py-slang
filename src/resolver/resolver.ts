@@ -585,6 +585,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitDelStmt(stmt: StmtNS.Del): void {
     this.resolve(stmt.targets);
   }
+  /** A type alias names a type, not a value: neither its name nor the names in it are resolved. */
+  visitTypeAliasStmt(_stmt: StmtNS.TypeAlias): void {}
   visitImportStmt(stmt: StmtNS.Import): void {
     for (const { name, alias } of stmt.names) {
       // `import a.b` binds `a`.

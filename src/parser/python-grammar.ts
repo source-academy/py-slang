@@ -302,6 +302,7 @@ const ParserRules = [
   },
   { name: "statement", symbols: ["statementAssign", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementAnnAssign", { type: "newline" }], postprocess: id },
+  { name: "statement", symbols: ["statementTypeAlias", { type: "newline" }], postprocess: id },
   {
     name: "statement",
     symbols: ["statementSubscriptAssign", { type: "newline" }],
@@ -801,12 +802,22 @@ const ParserRules = [
     symbols: [{ literal: "@" }, "expression", { type: "newline" }],
     postprocess: ([, e]: [moo.Token, ExprNS.Expr, moo.Token]) => e,
   },
+  { name: "statementDef$ebnf$1", symbols: ["type_params"], postprocess: id },
+  { name: "statementDef$ebnf$1", symbols: [], postprocess: () => null },
   {
     name: "statementDef",
-    symbols: [{ literal: "def" }, { type: "name" }, "params", { literal: ":" }, "block"],
-    postprocess: ([kw, name, params, , body]: [
+    symbols: [
+      { literal: "def" },
+      { type: "name" },
+      "statementDef$ebnf$1",
+      "def_params",
+      { literal: ":" },
+      "block",
+    ],
+    postprocess: ([kw, name, tps, params, , body]: [
       moo.Token,
       moo.Token,
+      Token[] | null,
       FunctionParam[],
       moo.Token,
       StmtNS.Stmt[],
@@ -818,6 +829,43 @@ const ParserRules = [
         params,
         body,
         [],
+        null,
+        tps ?? [],
+      ),
+  },
+  { name: "statementDef$ebnf$2", symbols: ["type_params"], postprocess: id },
+  { name: "statementDef$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "statementDef",
+    symbols: [
+      { literal: "def" },
+      { type: "name" },
+      "statementDef$ebnf$2",
+      "def_params",
+      { literal: "->" },
+      "expression",
+      { literal: ":" },
+      "block",
+    ],
+    postprocess: ([kw, name, tps, params, , returns, , body]: [
+      moo.Token,
+      moo.Token,
+      Token[] | null,
+      FunctionParam[],
+      moo.Token,
+      ExprNS.Expr,
+      moo.Token,
+      StmtNS.Stmt[],
+    ]) =>
+      new StmtNS.FunctionDef(
+        toAstToken(kw),
+        body[body.length - 1].endToken,
+        toAstToken(name),
+        params,
+        body,
+        [],
+        returns,
+        tps ?? [],
       ),
   },
   { name: "if_statement$ebnf$1", symbols: [] },
@@ -876,6 +924,34 @@ const ParserRules = [
       return new StmtNS.If(toAstToken(kw), endTok, test, body, else_);
     },
   },
+  { name: "statementTypeAlias$ebnf$1", symbols: ["type_params"], postprocess: id },
+  { name: "statementTypeAlias$ebnf$1", symbols: [], postprocess: () => null },
+  {
+    name: "statementTypeAlias",
+    symbols: [
+      { type: "name" },
+      { type: "name" },
+      "statementTypeAlias$ebnf$1",
+      { literal: "=" },
+      "expression",
+    ],
+    postprocess: (
+      [kw, name, tps, , value]: [moo.Token, moo.Token, Token[] | null, moo.Token, ExprNS.Expr],
+      _location: number,
+      reject: object,
+    ) =>
+      kw.value === "type"
+        ? new StmtNS.TypeAlias(toAstToken(kw), value.endToken, toAstToken(name), tps ?? [], value)
+        : reject,
+  },
+  { name: "type_params$ebnf$1$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "type_params$ebnf$1", symbols: ["type_params$ebnf$1$subexpression$1"], postprocess: id },
+  { name: "type_params$ebnf$1", symbols: [], postprocess: () => null },
+  {
+    name: "type_params",
+    symbols: [{ literal: "[" }, "names", "type_params$ebnf$1", { literal: "]" }],
+    postprocess: ([, ns]: [moo.Token, Token[], moo.Token | null, moo.Token]) => ns,
+  },
   { name: "names$ebnf$1", symbols: [] },
   { name: "names$ebnf$1$subexpression$1", symbols: [{ literal: "," }, { type: "name" }] },
   {
@@ -907,6 +983,7 @@ const ParserRules = [
   },
   { name: "blockInline", symbols: ["statementAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementAnnAssign"], postprocess: id },
+  { name: "blockInline", symbols: ["statementTypeAlias"], postprocess: id },
   { name: "blockInline", symbols: ["statementSubscriptAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementTupleAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementRaise"], postprocess: id },
@@ -977,11 +1054,88 @@ const ParserRules = [
     symbols: [{ literal: "*" }, { type: "name" }],
     postprocess: ([, t]: [moo.Token, moo.Token]) => toFunctionParam(t, true),
   },
-  { name: "params", symbols: [{ literal: "(" }, { literal: ")" }], postprocess: drop },
+  { name: "def_params", symbols: [{ literal: "(" }, { literal: ")" }], postprocess: drop },
   {
-    name: "params",
-    symbols: [{ literal: "(" }, "rest_names", { literal: ")" }],
+    name: "def_params",
+    symbols: [{ literal: "(" }, "def_rest_names", { literal: ")" }],
     postprocess: ([, ps]: [moo.Token, FunctionParam[], moo.Token]) => checkParameters(ps),
+  },
+  { name: "def_rest_names$ebnf$1$subexpression$1", symbols: [{ type: "comma" }] },
+  {
+    name: "def_rest_names$ebnf$1",
+    symbols: ["def_rest_names$ebnf$1$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "def_rest_names$ebnf$1", symbols: [], postprocess: () => null },
+  {
+    name: "def_rest_names",
+    symbols: ["def_plain_params", "def_rest_names$ebnf$1"],
+    postprocess: ([ps, comma]: [FunctionParam[], moo.Token | null]) => withTrailingComma(ps, comma),
+  },
+  { name: "def_rest_names$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
+  {
+    name: "def_rest_names$ebnf$2",
+    symbols: ["def_rest_names$ebnf$2$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "def_rest_names$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "def_rest_names",
+    symbols: ["def_plain_params", { literal: "," }, "def_kw_param", "def_rest_names$ebnf$2"],
+    postprocess: ([ps, , kw, comma]: [
+      FunctionParam[],
+      moo.Token,
+      FunctionParam,
+      moo.Token | null,
+    ]) => withTrailingComma([...ps, kw], comma),
+  },
+  { name: "def_rest_names$ebnf$3$subexpression$1", symbols: [{ type: "comma" }] },
+  {
+    name: "def_rest_names$ebnf$3",
+    symbols: ["def_rest_names$ebnf$3$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "def_rest_names$ebnf$3", symbols: [], postprocess: () => null },
+  {
+    name: "def_rest_names",
+    symbols: ["def_kw_param", "def_rest_names$ebnf$3"],
+    postprocess: ([kw, comma]: [FunctionParam, moo.Token | null]) => withTrailingComma([kw], comma),
+  },
+  { name: "def_plain_params", symbols: ["def_param"], postprocess: ([p]: [FunctionParam]) => [p] },
+  {
+    name: "def_plain_params",
+    symbols: ["def_plain_params", { literal: "," }, "def_param"],
+    postprocess: ([params, , p]: [FunctionParam[], moo.Token, FunctionParam]) => [...params, p],
+  },
+  {
+    name: "def_kw_param",
+    symbols: [{ literal: "**" }, { type: "name" }],
+    postprocess: ([, t]: [moo.Token, moo.Token]) => toFunctionParam(t, false, undefined, true),
+  },
+  {
+    name: "def_kw_param",
+    symbols: [{ literal: "**" }, { type: "name" }, { literal: ":" }, "expression"],
+    postprocess: ([, t, , ann]: [moo.Token, moo.Token, moo.Token, ExprNS.Expr]) =>
+      toFunctionParam(t, false, undefined, true, ann),
+  },
+  { name: "def_param", symbols: ["param"], postprocess: id },
+  {
+    name: "def_param",
+    symbols: [{ type: "name" }, { literal: ":" }, "expression"],
+    postprocess: ([t, , ann]: [moo.Token, moo.Token, ExprNS.Expr]) =>
+      toFunctionParam(t, false, undefined, false, ann),
+  },
+  {
+    name: "def_param",
+    symbols: [{ type: "name" }, { literal: ":" }, "expression", { literal: "=" }, "expression"],
+    postprocess: ([t, , ann, , d]: [moo.Token, moo.Token, ExprNS.Expr, moo.Token, ExprNS.Expr]) =>
+      toFunctionParam(t, false, d, false, ann),
+  },
+  {
+    name: "def_param",
+    symbols: [{ literal: "*" }, { type: "name" }, { literal: ":" }, "expression"],
+    postprocess: ([, t, , ann]: [moo.Token, moo.Token, moo.Token, ExprNS.Expr]) =>
+      toFunctionParam(t, true, undefined, false, ann),
   },
   {
     name: "expression",
@@ -1722,6 +1876,45 @@ const ParserRules = [
   { name: "comp_target", symbols: ["target"], postprocess: id },
   { name: "subscript_index", symbols: ["expression"], postprocess: id },
   { name: "subscript_index", symbols: ["slice_expr"], postprocess: id },
+  { name: "subscript_index$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "expression"] },
+  { name: "subscript_index$ebnf$1", symbols: ["subscript_index$ebnf$1$subexpression$1"] },
+  { name: "subscript_index$ebnf$1$subexpression$2", symbols: [{ literal: "," }, "expression"] },
+  {
+    name: "subscript_index$ebnf$1",
+    symbols: ["subscript_index$ebnf$1", "subscript_index$ebnf$1$subexpression$2"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "subscript_index$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
+  {
+    name: "subscript_index$ebnf$2",
+    symbols: ["subscript_index$ebnf$2$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "subscript_index$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "subscript_index",
+    symbols: ["expression", "subscript_index$ebnf$1", "subscript_index$ebnf$2"],
+    postprocess: ([first, rest, comma]: [
+      ExprNS.Expr,
+      [moo.Token, ExprNS.Expr][],
+      moo.Token | null,
+    ]) => {
+      const elements = [first, ...rest.map(d => d[1])];
+      return new ExprNS.Tuple(
+        first.startToken,
+        comma ? toAstToken(comma) : elements[elements.length - 1].endToken,
+        elements,
+      );
+    },
+  },
+  {
+    name: "subscript_index",
+    symbols: ["expression", { type: "comma" }],
+    postprocess: ([first, comma]: [ExprNS.Expr, moo.Token]) =>
+      new ExprNS.Tuple(first.startToken, toAstToken(comma), [first]),
+  },
   { name: "slice_expr$ebnf$1", symbols: ["expression"], postprocess: id },
   { name: "slice_expr$ebnf$1", symbols: [], postprocess: () => null },
   { name: "slice_expr$ebnf$2", symbols: ["expression"], postprocess: id },

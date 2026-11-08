@@ -16,9 +16,12 @@ import { NoSpreadValidator } from "./features/no-spread";
 import { NoDefaultValuesValidator } from "./features/no-default-values";
 import { NoFullPythonExpressionsValidator } from "./features/no-full-python-expressions";
 import { NoFullPythonStatementsValidator } from "./features/no-full-python-statements";
+import { NoDeclarationWithoutValueValidator } from "./features/no-declaration-without-value";
 import { NoDictsValidator } from "./features/no-dicts";
 import { NoKeywordArgsValidator } from "./features/no-keyword-args";
 import { NoTuplesValidator } from "./features/no-tuples";
+import { NoTypeAnnotationsValidator } from "./features/no-type-annotations";
+import { RequireTypeAnnotationsValidator } from "./features/require-type-annotations";
 import { FeatureValidator } from "./types";
 
 /** Syntax of full Python that no sublanguage (§1–§4) has: the parser accepts it, these reject it. */
@@ -29,6 +32,7 @@ const beyondPython4Validators: FeatureValidator[] = [
   NoDefaultValuesValidator,
   NoFullPythonStatementsValidator,
   NoFullPythonExpressionsValidator,
+  NoTypeAnnotationsValidator,
 ];
 
 /**
@@ -104,6 +108,19 @@ export function makeChapter4Validators(): FeatureValidator[] {
     createBreakContinueValidator(),
     NoAnnAssignValidator,
   ];
+}
+
+/**
+ * Typed Python §4 (docs/typed-python-4.md): Python §4 with type annotations. The rules on the
+ * annotations themselves: every `def` annotates its parameters and its return type, and a name is
+ * declared by an assignment (`x: int = 0`), not on its own (`x: int`).
+ *
+ * These run on the parsed program, before its types are erased, with {@link traverseAST} (the
+ * Resolver does not look at annotations: they are not values). The program then runs as a Python §4
+ * program: see `prepareTypedProgram` in src/typecheck/.
+ */
+export function makeTypedChapter4Validators(): FeatureValidator[] {
+  return [RequireTypeAnnotationsValidator, NoDeclarationWithoutValueValidator];
 }
 
 export function makeValidatorsForChapter(chapter: number): FeatureValidator[] {

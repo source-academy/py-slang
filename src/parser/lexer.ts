@@ -111,6 +111,7 @@ const mooLexer = moo.compile({
   colon: ":",
   comma: ",",
   plus: "+",
+  rarrow: "->",
   minus: "-",
   star: "*",
   slash: "/",
