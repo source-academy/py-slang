@@ -8,7 +8,7 @@ import { AstWriter } from "./generate-ast";
 const writer = new AstWriter({
   additionalImports: ['import { PyComplexNumber } from "./types";'],
   typeAliases: [
-    "export type FunctionParam = Token & {\n  isStarred: boolean;\n  isDoubleStarred?: boolean;\n  trailingComma?: boolean;\n  default?: ExprNS.Expr;\n};",
+    "export type FunctionParam = Token & {\n  isStarred: boolean;\n  isDoubleStarred?: boolean;\n  trailingComma?: boolean;\n  default?: ExprNS.Expr;\n  /** The annotation of a `def` parameter (`x: int`); only the typed sublanguages allow it. */\n  annotation?: ExprNS.Expr;\n};",
     "export type AssignTarget = ExprNS.Variable | ExprNS.Subscript;",
   ],
   fieldOverrides: {

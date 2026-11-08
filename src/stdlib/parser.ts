@@ -68,6 +68,9 @@ function transformParam(p: FunctionParam): Value {
   if (p.default) {
     throw new Error("Default values of parameters are not supported in parse tree generation");
   }
+  if (p.annotation) {
+    throw new Error("Type annotations are not supported in parse tree generation");
+  }
   const nameNode = vector_to_llist([
     { type: "string", value: "name" },
     { type: "string", value: p.lexeme },
@@ -245,6 +248,9 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
     }
     case "FunctionDef": {
       const fn = node as StmtNS.FunctionDef;
+      if (fn.returns || fn.typeParams.length > 0) {
+        throw new Error("Type annotations are not supported in parse tree generation");
+      }
       return vector_to_llist([
         { type: "string", value: "function_definition" },
         vector_to_llist([
@@ -341,6 +347,8 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
         { type: "string", value: "assert_statement" },
         transform((node as StmtNS.Assert).value),
       ]);
+    case "TypeAlias":
+      throw new Error("Type statements are not supported in parse tree generation");
     case "Pass":
       return vector_to_llist([{ type: "string", value: "pass_statement" }]);
     case "Break":

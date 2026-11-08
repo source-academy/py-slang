@@ -267,6 +267,21 @@ describe("consumers of the tree", () => {
     );
   });
 
+  test("parse() rejects type annotations instead of dropping them", () => {
+    for (const src of [
+      "def f(x: int):\n    return x",
+      "def f(x) -> int:\n    return x",
+      "def f[T](x):\n    return x",
+    ]) {
+      expect(() => transform(parse(src + "\n"))).toThrow(
+        "Type annotations are not supported in parse tree generation",
+      );
+    }
+    expect(() => transform(parse("type X = int\n"))).toThrow(
+      "Type statements are not supported in parse tree generation",
+    );
+  });
+
   test("parse() rejects the other new syntax too", () => {
     for (const src of ["(1, 2)", "{1: 2}", "f(k=1)", "a, b = 1, 2"]) {
       expect(() => transform(parse(src + "\n"))).toThrow();

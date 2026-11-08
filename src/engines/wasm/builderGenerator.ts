@@ -1024,6 +1024,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   visitDelStmt(_stmt: StmtNS.Del): WasmInstruction {
     throw new Error("del statements are not supported");
   }
+  visitTypeAliasStmt(_stmt: StmtNS.TypeAlias): WasmInstruction {
+    throw new Error("type statements are not supported (they are erased before a program runs)");
+  }
   visitImportStmt(_stmt: StmtNS.Import): WasmInstruction {
     throw new Error("import statements are not supported");
   }

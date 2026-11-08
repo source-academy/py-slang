@@ -15,9 +15,12 @@ export function traverseAST(node: ASTNode, fn: (node: ASTNode) => void): void {
   node.accept(new TraverseVisitor(fn));
 }
 
-/** The default values of parameters are expressions of the tree too. */
+/** The default values and the annotations of parameters are expressions of the tree too. */
 function traverseDefaults(parameters: FunctionParam[], fn: (node: ASTNode) => void): void {
-  for (const param of parameters) if (param.default) traverseAST(param.default, fn);
+  for (const param of parameters) {
+    if (param.default) traverseAST(param.default, fn);
+    if (param.annotation) traverseAST(param.annotation, fn);
+  }
 }
 
 class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
@@ -31,7 +34,12 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): void {
     traverseDefaults(stmt.parameters, this.fn);
+    if (stmt.returns) traverseAST(stmt.returns, this.fn);
     stmt.body.forEach(s => traverseAST(s, this.fn));
+  }
+
+  visitTypeAliasStmt(stmt: StmtNS.TypeAlias): void {
+    traverseAST(stmt.value, this.fn);
   }
 
   visitIfStmt(stmt: StmtNS.If): void {

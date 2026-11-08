@@ -1,5 +1,6 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import { Environment } from "../resolver/resolver";
+import { Token } from "../tokenizer";
 
 export type ASTNode = StmtNS.Stmt | ExprNS.Expr;
 
@@ -19,6 +20,17 @@ export class FeatureNotSupportedError extends Error {
     this.name = "FeatureNotSupportedError";
     this.feature = feature;
     this.node = node;
+  }
+}
+
+/** Typed Python §4: a `def` without the annotation that it needs. Located at `token`. */
+export class MissingTypeAnnotationError extends Error {
+  token: Token;
+
+  constructor(detail: string, token: Token) {
+    super(`Missing type annotation: ${detail} (line ${token.line}, col ${token.col})`);
+    this.name = "MissingTypeAnnotationError";
+    this.token = token;
   }
 }
 

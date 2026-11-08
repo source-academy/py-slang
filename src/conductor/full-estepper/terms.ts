@@ -64,6 +64,16 @@ function unsupportedParameters(params: ExprNS.Lambda["parameters"]): string | un
   return undefined;
 }
 
+/**
+ * The parser accepts the annotations of a `def` (Typed Python §4), but CPython evaluates them when
+ * the `def` runs, which this engine does not do yet: a program with annotations is not run.
+ */
+function unsupportedAnnotations(def: StmtNS.FunctionDef): string | undefined {
+  if (def.parameters.some(p => p.annotation) || def.returns) return "annotations of functions";
+  if (def.typeParams.length > 0) return "type parameters";
+  return undefined;
+}
+
 const NODE_NAMES: Record<string, string> = {
   Tuple: "tuples",
   Dict: "dictionaries",
@@ -194,7 +204,7 @@ export function translateStmt(s: StmtNS.Stmt): Stmt {
     return { k: "forinit", target: s.target.lexeme, iter: translateExpr(s.iter), src: s };
   }
   if (s instanceof StmtNS.FunctionDef) {
-    const what = unsupportedParameters(s.parameters);
+    const what = unsupportedParameters(s.parameters) ?? unsupportedAnnotations(s);
     return what ? { k: "unsupported", what } : { k: "def", src: s };
   }
   if (s instanceof StmtNS.Return)
@@ -218,6 +228,7 @@ export function translateStmt(s: StmtNS.Stmt): Stmt {
     FromImport: "imports",
     Assert: "assert statements",
     AnnAssign: "annotated assignment",
+    TypeAlias: "type statements",
   };
   return { k: "unsupported", what: names[s.kind] ?? s.kind };
 }

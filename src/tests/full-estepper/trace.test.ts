@@ -317,6 +317,10 @@ describe("what is not supported yet", () => {
     ["(-8) ** 0.5", "complex numbers", "a complex result"],
     ["x = 'a %s' % 1", "formatting a string with %", "% formatting"],
     ["x = 1 << 2", "the operator <<", "a shift"],
+    ["def f(x: int):\n    return x", "annotations of functions", "an annotated parameter"],
+    ["def f(x) -> int:\n    return x", "annotations of functions", "a return annotation"],
+    ["def f[T](x):\n    return x", "type parameters", "type parameters"],
+    ["type X = int", "type statements", "a type statement"],
   ])("%s", (code, feature) => {
     const result = evaluate(`${code}\n`);
     expect(result.error?.kind).toBe("NotImplementedError");
