@@ -373,6 +373,18 @@ them into the checker's file system. As a stop-gap, hand-write stubs for `rune`,
 and `binary_tree`. A module without a stub is not resolved: the import is an error, as there is no `Any` to give its
 names a type.
 
+**Done so far (first part of phase 4):**
+
+* `src/typecheck/module-description.ts`: the description format (version 1: `number`, `integer`, `string`,
+  `boolean`, `void`, opaque types, `list`, `pair`, `array`, `function`) and `toStub`, the mapper to a Python
+  stub. An unknown version or kind is rejected with a message that says so.
+* The checker gives the stub of each module that a program imports (`from rune import show`) to pyright as
+  `rune.pyi`, once, for checks and for REPL chunks. A module with no description is the error "The module
+  X cannot be imported: its types are not known to Typed Python §4".
+* `src/typecheck/modules/`: the temporary description of `rune`. `curve`, `sound` and `binary_tree` follow,
+  and all of them go when the modules publish their own descriptions (modules#996).
+* Not yet: fetching a published description at run time (needs the format agreed in modules#996).
+
 ### Phase 5: language directory, documentation, release (≈ 3 days)
 
 * language-directory: add `src/languages/python/python4Typed.ts` and register it in

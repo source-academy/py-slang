@@ -22,4 +22,6 @@ export const TYPED_PYTHON_4_CONFIG = {
   reportExplicitAny: "error",
   reportRedeclaration: "none",
   reportUnusedExpression: "none",
+  // A module is a stub (`rune.pyi`) with no source: the module is loaded at run time.
+  reportMissingModuleSource: "none",
 } as const;

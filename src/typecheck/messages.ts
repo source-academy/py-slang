@@ -110,6 +110,12 @@ const REWRITES: { pattern: RegExp; message: (match: RegExpExecArray) => string }
       "The type Any is not available: for a function that works for any type, use a type parameter, as in def f[A](x: A) -> A",
   },
   {
+    // from m import x, where nothing is known of the types of m
+    pattern: /^Import "(.*)" could not be resolved$/,
+    message: ([, name]) =>
+      `The module ${name} cannot be imported: its types are not known to Typed Python §4`,
+  },
+  {
     pattern: /^Type of "(.*)" is (?:partially )?unknown/,
     message: ([, name]) =>
       `The type of ${name} cannot be determined: declare it, as in ${name}: list[int] = []`,

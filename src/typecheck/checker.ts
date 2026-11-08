@@ -3,6 +3,8 @@ import { parse } from "../parser/parser-adapter";
 import { traverseAST } from "../validator";
 import { PyrightClient, type WorkerFactory } from "./client";
 import { tidy, toTypeDiagnostic, type TypeDiagnostic } from "./diagnostics";
+import { toStub, UnknownDescriptionError } from "./module-description";
+import { temporaryDescriptions, type DescriptionSource } from "./modules";
 
 /** What a program binds at its top level: what a later REPL chunk can use. */
 export interface TopLevelNames {
@@ -65,6 +67,20 @@ function namesOfChunk(source: string): TopLevelNames {
   }
 }
 
+/** The names of the modules that a program imports (`from rune import show`), not its own files (`from .x import y`). */
+function importedModules(source: string): string[] {
+  const text = source.endsWith("\n") ? source : source + "\n";
+  const modules = new Set<string>();
+  try {
+    traverseAST(parse(text), node => {
+      if (node instanceof StmtNS.FromImport && node.level === 0) modules.add(node.module.lexeme);
+    });
+  } catch {
+    // Not a program: the checker reports why.
+  }
+  return [...modules];
+}
+
 /** A chunk that has been checked and is not part of the session yet: see {@link TypedPythonChecker.proposeChunk}. */
 export interface ProposedChunk {
   diagnostics: TypeDiagnostic[];
@@ -85,10 +101,52 @@ export class TypedPythonChecker {
   /** For each name that a chunk declared with a type, the text of the type (of the last that did). */
   private readonly declared = new Map<string, string>();
 
-  private constructor(private readonly client: PyrightClient) {}
+  /** The modules whose stubs the checker has been given. */
+  private readonly provided = new Set<string>();
 
-  static async start(createWorker: WorkerFactory): Promise<TypedPythonChecker> {
-    return new TypedPythonChecker(await PyrightClient.start(createWorker));
+  private constructor(
+    private readonly client: PyrightClient,
+    private readonly descriptions: DescriptionSource,
+  ) {}
+
+  /** `descriptions` says what the types of an imported module are (see {@link provideModules}). */
+  static async start(
+    createWorker: WorkerFactory,
+    descriptions: DescriptionSource = temporaryDescriptions,
+  ): Promise<TypedPythonChecker> {
+    return new TypedPythonChecker(await PyrightClient.start(createWorker), descriptions);
+  }
+
+  /**
+   * Gives the checker the types of the modules that the program imports, as stubs: a file `rune.pyi`
+   * for `from rune import show`, from the module's description (module-description.ts). A module
+   * with no description is not given: checking reports that the import cannot be resolved. A
+   * description that this version cannot read is reported here, at the first line.
+   */
+  private async provideModules(source: string): Promise<TypeDiagnostic[]> {
+    const problems: TypeDiagnostic[] = [];
+    for (const module of importedModules(source)) {
+      if (this.provided.has(module)) continue;
+      const description = this.descriptions(module);
+      if (!description) continue;
+      try {
+        await this.client.check(`${module}.pyi`, toStub(description));
+        this.provided.add(module);
+      } catch (cause) {
+        if (!(cause instanceof UnknownDescriptionError)) throw cause;
+        const message = `The types of the module ${module} cannot be used: ${cause.message}`;
+        problems.push({
+          severity: "error",
+          message,
+          original: message,
+          line: 1,
+          column: 0,
+          endLine: 1,
+          endColumn: 0,
+        });
+      }
+    }
+    return problems;
   }
 
   /**
@@ -96,8 +154,9 @@ export class TypedPythonChecker {
    * version of the same program, as when the student types.
    */
   async check(source: string): Promise<TypeDiagnostic[]> {
+    const problems = await this.provideModules(source);
     const diagnostics = await this.client.check("main.py", source);
-    return tidy(diagnostics.map(d => toTypeDiagnostic(d)));
+    return tidy([...problems, ...diagnostics.map(d => toTypeDiagnostic(d))]);
   }
 
   /**
@@ -151,11 +210,13 @@ export class TypedPythonChecker {
     ];
 
     const index = this.chunks;
-    const diagnostics = tidy(
-      (await this.client.check(`chunk_${index}.py`, [...header, source].join("\n"))).map(d =>
+    const problems = await this.provideModules(source);
+    const diagnostics = tidy([
+      ...problems,
+      ...(await this.client.check(`chunk_${index}.py`, [...header, source].join("\n"))).map(d =>
         toTypeDiagnostic(d, header.length),
       ),
-    );
+    ]);
 
     let accepted = false;
     return {
