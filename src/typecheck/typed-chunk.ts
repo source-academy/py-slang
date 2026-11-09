@@ -1,6 +1,6 @@
 import type { StmtNS } from "../ast-types";
 import { makeTypedChapter4Validators, traverseAST } from "../validator";
-import type { ProposedChunk } from "./checker";
+import { topLevelNames, type ProposedChunk } from "./checker";
 import type { TypeDiagnostic } from "./diagnostics";
 import { eraseTypes } from "./erase";
 import { StaticTypeErrors } from "./errors";
@@ -16,18 +16,36 @@ export interface ChunkChecker {
    * and they are left out of the program that runs, as the module does not export them.
    */
   typeNames?(module: string): ReadonlySet<string> | undefined;
+  /** The names that the chunks of the session so far bound only as types (see `rememberTypeBindings`). */
+  typeBindings?(): ReadonlySet<string>;
+  /**
+   * An accepted chunk bound `types` only as types, and bound `rebound` (which were types) as values:
+   * a later chunk that uses such a type as a value is rejected.
+   */
+  rememberTypeBindings?(types: ReadonlySet<string>, rebound: ReadonlySet<string>): void;
 }
 
 /**
  * Erases the types of a program that the checker accepted, and rejects the use as a value of a name that
- * is only a type (`print(Rune)` after `from rune import Rune`): it is left out of the program that runs.
+ * is only a type (`print(Rune)` after `from rune import Rune`, also if an earlier chunk of the session
+ * imported it): it is left out of the program that runs. Gives the names that the program binds only as
+ * types, and those of the session that it binds as values instead.
  */
-function erase(program: StmtNS.Stmt, checker: ChunkChecker): void {
+function erase(
+  program: StmtNS.Stmt,
+  source: string,
+  checker: ChunkChecker,
+): { types: ReadonlySet<string>; rebound: ReadonlySet<string> } {
   const uses: TypeDiagnostic[] = [];
-  eraseTypes(
-    program,
-    module => checker.typeNames?.(module),
-    name => {
+  const bound = new Set(topLevelNames(program, source).all);
+  const session = checker.typeBindings?.() ?? new Set<string>();
+  let types: ReadonlySet<string> = new Set();
+  eraseTypes(program, {
+    typeNames: module => checker.typeNames?.(module),
+    sessionTypeBindings: session,
+    boundNames: bound,
+    onTypeBindings: names => (types = names),
+    onValueUse: name => {
       const message = `${name.lexeme} is a type: use it to annotate, not as a value`;
       uses.push({
         severity: "error",
@@ -39,8 +57,12 @@ function erase(program: StmtNS.Stmt, checker: ChunkChecker): void {
         endColumn: name.col + name.lexeme.length,
       });
     },
-  );
+  });
   rejectErrors(uses);
+  return {
+    types,
+    rebound: new Set([...session].filter(name => bound.has(name) && !types.has(name))),
+  };
 }
 
 /**
@@ -82,8 +104,11 @@ export async function checkTypedChunk(
   validateTypedProgram(program);
   const proposed = await checker.proposeChunk(source);
   rejectErrors(proposed.diagnostics);
-  erase(program, checker);
-  return proposed.accept;
+  const { types, rebound } = erase(program, source, checker);
+  return () => {
+    proposed.accept();
+    checker.rememberTypeBindings?.(types, rebound);
+  };
 }
 
 /**
@@ -97,5 +122,5 @@ export async function checkTypedProgram(
 ): Promise<void> {
   validateTypedProgram(program);
   rejectErrors(await checker.check(source));
-  erase(program, checker);
+  erase(program, source, checker);
 }

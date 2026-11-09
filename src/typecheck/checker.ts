@@ -101,6 +101,8 @@ export class TypedPythonChecker {
   /** For each name that a chunk declared with a type, the text of the type (of the last that did). */
   private readonly declared = new Map<string, string>();
 
+  /** The names that accepted chunks bound only as types (`from rune import Rune`). */
+  private readonly typeBindingNames = new Set<string>();
   /** The modules whose stubs the checker has been given. */
   private readonly provided = new Set<string>();
 
@@ -252,6 +254,15 @@ export class TypedPythonChecker {
   typeNames(module: string): ReadonlySet<string> | undefined {
     const description = this.descriptions(module);
     return description && description.module === module ? opaqueTypeNames(description) : undefined;
+  }
+
+  typeBindings(): ReadonlySet<string> {
+    return this.typeBindingNames;
+  }
+
+  rememberTypeBindings(types: ReadonlySet<string>, rebound: ReadonlySet<string>): void {
+    for (const name of rebound) this.typeBindingNames.delete(name);
+    for (const name of types) this.typeBindingNames.add(name);
   }
 
   /** Stops the workers. */

@@ -115,9 +115,39 @@ test("a type that is imported only as a type cannot be used as a value", async (
   expect(outputs).toEqual([]);
 });
 
+test("an aliased type is a type under its alias, and a value of the same name as the export is not", async () => {
+  const { session, outputs } = await setUp();
+  const aliased = await session
+    .runChunk("from rune import Rune as T\nprint('before')\nprint(T)\n")
+    .catch((e: unknown) => e);
+  expect((aliased as StaticTypeErrors).errors[0]).toMatchObject({
+    message: "T is a type: use it to annotate, not as a value",
+    line: 3,
+  });
+  // `Rune` is not bound by that import: it is an ordinary name (here, the program's own)
+  await session.runChunk("from rune import Rune as T\nRune = 5\nprint(Rune)\n");
+  expect(outputs).toEqual(["5"]);
+});
+
+test("a type that an earlier chunk of the session imported cannot be used as a value in a later one", async () => {
+  const { session, outputs } = await setUp();
+  await session.runChunk("from rune import heart, scale, Rune\n");
+  // as an annotation it is fine, in a later chunk too
+  await session.runChunk("def half(r: Rune) -> Rune:\n    return r\nprint(half(heart) is heart)\n");
+  const error = await session.runChunk("print(Rune)\n").catch((e: unknown) => e);
+  expect((error as StaticTypeErrors).errors[0]).toMatchObject({
+    message: "Rune is a type: use it to annotate, not as a value",
+    line: 1,
+  });
+  // a chunk that binds the name as a value makes it a value from then on
+  await session.runChunk("Rune = 7\nprint(Rune)\n");
+  await session.runChunk("print(Rune + 1)\n");
+  expect(outputs).toEqual(["True", "7", "8"]);
+});
+
 describe("the names that a program imports only as types", () => {
   const erased = (source: string) =>
-    eraseTypes(parse(source), () => new Set(["Rune"])).statements[0];
+    eraseTypes(parse(source), { typeNames: () => new Set(["Rune"]) }).statements[0];
 
   test("are left out of the import, which stays if other names are imported", () => {
     const stmt = erased("from rune import heart, Rune\n") as StmtNS.FromImport;
@@ -132,7 +162,7 @@ describe("the names that a program imports only as types", () => {
   test("are left alone if the module has no types of that name", () => {
     expect(
       (
-        eraseTypes(parse("from sound import Rune\n"), () => undefined)
+        eraseTypes(parse("from sound import Rune\n"), { typeNames: () => undefined })
           .statements[0] as StmtNS.FromImport
       ).names,
     ).toHaveLength(1);

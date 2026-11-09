@@ -49,6 +49,18 @@ export class LazyChecker implements ChunkChecker {
     private readonly descriptions: DescriptionSource = temporaryDescriptions,
   ) {}
 
+  /** The names that accepted chunks bound only as types: kept here, so that a new checker is told nothing of them. */
+  private readonly typeBindingNames = new Set<string>();
+
+  typeBindings(): ReadonlySet<string> {
+    return this.typeBindingNames;
+  }
+
+  rememberTypeBindings(types: ReadonlySet<string>, rebound: ReadonlySet<string>): void {
+    for (const name of rebound) this.typeBindingNames.delete(name);
+    for (const name of types) this.typeBindingNames.add(name);
+  }
+
   /** The names that a module defines only as types: known without waiting for the checker to load. */
   typeNames(module: string): ReadonlySet<string> | undefined {
     const description = this.descriptions(module);
