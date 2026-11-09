@@ -51,10 +51,9 @@ describe("the library documentation of Python §4 Typed", () => {
     }
   });
 
-  test("keep the documentation parameters that the declaration does not have out of the signature", () => {
-    // math_nextafter documents `steps`, but takes two arguments
+  test("shows the optional parameter `steps` of math_nextafter", () => {
     expect(typed("math")).toContain(
-      "def math_nextafter(x: int | float, y: int | float) -&gt; float",
+      "def math_nextafter(x: int | float, y: int | float, steps: int = ...) -&gt; float",
     );
   });
 });

@@ -79,11 +79,11 @@ export const BRIDGED_BUILTINS: BridgedBuiltin[] = [
     "math_copysign",
     "math_fmod",
     "math_ldexp",
-    "math_nextafter",
     "math_pow",
     "math_remainder",
   ]),
   ...entry("math", 3, ["math_fma"]),
+  ...entry("math", 2, ["math_nextafter"], true),
   ...entry("math", 1, ["math_log", "math_perm"], true),
   ...entry("math", 0, ["math_gcd", "math_lcm"], true),
 ];

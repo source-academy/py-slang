@@ -22,12 +22,6 @@ import {
 /** The names whose types are not fixed yet (py-slang issue 631). */
 const NOT_FIXED = new Set(["tokenize", "parse", "apply_in_underlying_python"]);
 
-/**
- * Parameters that the documentation has and the type checker's declaration does not: `math_nextafter` documents
- * `steps`, but it takes two arguments (and is not implemented yet). They are left out of the signature.
- */
-const DOCUMENTED_ONLY: Record<string, string[]> = { math_nextafter: ["steps"] };
-
 /** Where the documentation writes the parameters in another way than the declaration: `draw_data(...values)` is `(value1, *values)`. */
 const PARAMETER_NAMES: Record<string, string[]> = {
   draw_data: ["value1", "*values"],
@@ -86,9 +80,7 @@ export function typedLibrary(source: string, declarations: Declarations): string
           else if (!declaration)
             throw new Error(`no declaration of ${fn}: add it to prelude.pyi or builtin-types.txt`);
           else {
-            const names =
-              PARAMETER_NAMES[fn] ??
-              parameterNames(params ?? "").filter(name => !DOCUMENTED_ONLY[fn]?.includes(name));
+            const names = PARAMETER_NAMES[fn] ?? parameterNames(params ?? "");
             signature = `def ${renderSignature(fn, names, declaration, fn, false)}`;
           }
         } else {
