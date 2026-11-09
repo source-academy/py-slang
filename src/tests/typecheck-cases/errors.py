@@ -23,8 +23,15 @@ def apply(f: Callable[[int], int], v: int) -> int:
     return f(v)
 apply(lambda s: s.upper(), 3)                      # ERROR: Cannot access attribute "upper" for class "int"
 set_head(pair(1, 2), "x")                          # ERROR: set_head expects v to be H, but got str
-tail(xs)[0]                                        # ERROR: cannot be indexed
+tail(pair(1, llist(2)))[0]                         # ERROR: cannot be indexed
 def mixed(c: bool) -> int:
     ys = llist(1, 2) if c else llist("a")
     zs: LList[int | str] = llist(1, 2) if c else llist("a")
     return length(zs) + length(ys)                 # ERROR: length expects xs to be LList[A], but got LList[int] | LList[str]
+def second(ys: LList[int]) -> int:
+    return 1 if is_none(ys) else 2 if is_none(tail(ys)) else head(tail(ys))  # ERROR: head expects p to be Pair[H, T], but got LList[int]
+tail(5)                                            # ERROR: tail expects p to be Pair[H, T], but got int
+def after_is_pair(x: object) -> int:
+    return arity(tail(x)) if is_pair(x) else 0     # ERROR: arity expects f to be (...) -> object, but got LList[Any]
+def annotated(x: Pair[int, Callable[[], int]]) -> int:
+    return arity(tail(x))
