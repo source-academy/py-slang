@@ -58,6 +58,7 @@ The following types are available without imports.
 | `Pair[H, T]` | pairs whose head has type `H` and whose tail has type `T` |
 | `LList[T]` | linked lists of elements of type `T`: `Pair[T, LList[T]] \| None` |
 | `Stream[T]` | streams of elements of type `T`: `Pair[T, Callable[[], Stream[T]]] \| None` |
+| `object` | any value: a function that has `object` as the type of a parameter, such as `is_none`, accepts every value. Unlike `Any`, which there is not, a program can do nothing with an `object` but pass it on or test it (`is_none(x)`, `is_pair(x)`, ...) |
 | `Callable[[T1, ..., Tn], R]` | functions with `n` parameters of types `T1`, ..., `Tn` that return a value of type `R` |
 | `T1 \| T2` | values of type `T1` or of type `T2` |
 

@@ -23,6 +23,9 @@ The following types are available without imports.
                                     \texttt{Pair[}$T$\texttt{,~LList[}$T$\texttt{]]~|~None} \\
     \texttt{Stream[}$T$\texttt{]} & streams of elements of type $T$:\newline
                                      \texttt{Pair[}$T$\texttt{,~Callable[[],~Stream[}$T$\texttt{]]]~|~None} \\
+    \texttt{object} & any value: a function with a parameter of type \texttt{object}, such as
+      \texttt{is\_none}, accepts every value. Unlike \texttt{Any}, which is not available, an
+      \texttt{object} can only be passed on or tested (\texttt{is\_none(x)}, \texttt{is\_pair(x)}, \ldots) \\
     \texttt{Callable[[}$T_1$\texttt{,~}\ldots\texttt{,~}$T_n$\texttt{],~}$R$\texttt{]}
         & functions with $n$ parameters of types $T_1, \ldots, T_n$ that return a value of type $R$ \\
     $T_1$~\texttt{|}~$T_2$ & values of type $T_1$ or of type $T_2$ \\
