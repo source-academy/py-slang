@@ -250,3 +250,40 @@ export function opaqueTypeNames(description: ModuleDescription): ReadonlySet<str
     description.opaqueTypes.map(type => (typeof type === "string" ? type : type.name)),
   );
 }
+
+/** What a student reads of a module: its types, and its names with their Python types. */
+export interface ModuleSignatures {
+  /** The types that the module defines, with their type parameters. */
+  types: { name: string; typeParameters: string[] }[];
+  /** `def beside(rune1: Rune, rune2: Rune, /) -> Rune` and `heart: Rune`, in the order of the description. */
+  lines: string[];
+}
+
+/**
+ * The names of a module with their types, as the documentation shows them: what the stub says,
+ * without its private helpers (`_Callable` is `Callable`).
+ */
+export function signaturesOf(description: ModuleDescription): ModuleSignatures {
+  if (description.version !== MODULE_DESCRIPTION_VERSION)
+    throw new UnknownDescriptionError(`version ${String(description.version)}`);
+  const types = description.opaqueTypes.map(type =>
+    typeof type === "string" ? { name: type, typeParameters: [] } : type,
+  );
+  const opaque = new Map(types.map(({ name, typeParameters }) => [name, typeParameters.length]));
+  const show = (text: string) => text.replace(/\b_(Callable|LList|Pair)\b/g, "$1");
+  const lines: string[] = [];
+  for (const { name, params, returns, typeParameters = [] } of description.functions) {
+    const scope = { opaque, parameters: new Set(typeParameters) };
+    const parameters = params.map(p => `${p.name}: ${pythonType(p.type, scope, "in")}`);
+    if (parameters.length > 0) parameters.push("/");
+    const generic = typeParameters.length ? `[${typeParameters.join(", ")}]` : "";
+    lines.push(
+      show(
+        `def ${name}${generic}(${parameters.join(", ")}) -> ${pythonType(returns, scope, "out")}`,
+      ),
+    );
+  }
+  for (const { name, type } of description.constants)
+    lines.push(show(`${name}: ${pythonType(type, { opaque, parameters: new Set() }, "out")}`));
+  return { types, lines };
+}
