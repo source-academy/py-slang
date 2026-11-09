@@ -30,12 +30,12 @@ describe("the stub that a description becomes", () => {
       {
         name: "each",
         params: [
-          { name: "f", type: { function: { params: ["integer"], returns: "boolean" } } },
+          { name: "f", type: { function: { params: ["number"], returns: "boolean" } } },
           { name: "xs", type: { list: "integer" } },
         ],
         returns: { pair: [{ array: "number" }, "void"] },
       },
-      { name: "now", params: [], returns: "integer" },
+      { name: "now", params: [], returns: "number" },
     ],
     constants: [{ name: "origin", type: { opaque: "Thing" } }],
   };
@@ -47,9 +47,9 @@ describe("the stub that a description becomes", () => {
         "from __builtins__ import LList as _LList, Pair as _Pair",
         "class Thing:",
         "    def __init__(self, _never: _NoReturn, /) -> None: ...",
-        "def make(size: float, label: str, /) -> Thing: ...",
-        "def each(f: _Callable[[int], bool], xs: _LList[int], /) -> _Pair[list[float], None]: ...",
-        "def now() -> int: ...",
+        "def make(size: int | float, label: str, /) -> Thing: ...",
+        "def each(f: _Callable[[float], bool], xs: _LList[int], /) -> _Pair[list[float], None]: ...",
+        "def now() -> float: ...",
         "origin: Thing",
         "",
       ].join("\n"),
@@ -97,6 +97,56 @@ describe("the stub that a description becomes", () => {
         functions: [{ name: "f", params: [], returns: { opaque: "Box" } }],
       }),
     ).toThrow(/Box has 1 type parameters, not 0/);
+  });
+
+  test("a number is int | float going in and float coming out; a callback turns that around", () => {
+    const stub = toStub({
+      version: 1,
+      module: "nums",
+      opaqueTypes: [],
+      functions: [
+        {
+          name: "each",
+          params: [
+            { name: "n", type: "integer" },
+            { name: "x", type: "number" },
+            { name: "f", type: { function: { params: ["number"], returns: "number" } } },
+          ],
+          returns: { function: { params: ["number"], returns: "number" } },
+        },
+      ],
+      constants: [{ name: "pi", type: "number" }],
+    });
+    expect(stub).toContain(
+      "def each(n: int, x: int | float, f: _Callable[[float], int | float], /) -> _Callable[[int | float], float]: ...",
+    );
+    expect(stub).toContain("pi: float");
+  });
+
+  test("an integer is for a parameter: a result comes back as a float", () => {
+    const base: ModuleDescription = {
+      version: 1,
+      module: "nums",
+      opaqueTypes: [],
+      functions: [],
+      constants: [],
+    };
+    expect(() =>
+      toStub({ ...base, functions: [{ name: "f", params: [], returns: "integer" }] }),
+    ).toThrow(/integer is for a parameter/);
+    // The parameter of a callback that a program passes in is received by the program.
+    expect(() =>
+      toStub({
+        ...base,
+        functions: [
+          {
+            name: "f",
+            params: [{ name: "g", type: { function: { params: ["integer"], returns: "void" } } }],
+            returns: "void",
+          },
+        ],
+      }),
+    ).toThrow(/integer is for a parameter/);
   });
 
   test("what this version does not know is rejected, not guessed", () => {
@@ -274,7 +324,7 @@ describe("descriptions that make a stub that does not check", () => {
         version: 1,
         module: "pkg.sub",
         opaqueTypes: [],
-        functions: [{ name: "f", params: [{ name: "x", type: "integer" }], returns: "integer" }],
+        functions: [{ name: "f", params: [{ name: "x", type: "integer" }], returns: "number" }],
         constants: [],
       });
       try {
@@ -381,5 +431,61 @@ describe("the temporary descriptions of curve, sound and binary_tree", () => {
     ],
   ])("binary_tree: %s is an error", async (_, program) => {
     expect((await accepted(program)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("whole numbers and numbers in programs that use a module", () => {
+  let checker: TypedPythonChecker;
+  beforeAll(async () => {
+    checker = await startTypedChecker();
+  }, CHECKER_SETUP_TIMEOUT_MS);
+  afterAll(() => checker.dispose());
+
+  test("an int is accepted where a number is wanted, a float where a whole number is wanted is not", async () => {
+    expect(
+      errors(
+        await checker.check(
+          "from rune import stackn, heart, scale\nstackn(3, scale(2, heart))\nscale(0.5, heart)\n",
+        ),
+      ),
+    ).toEqual([]);
+    const [error] = errors(
+      await checker.check("from rune import stackn, heart\nstackn(2.5, heart)\n"),
+    );
+    expect(error.message).toBe("stackn expects n to be int, but got float");
+    expect(
+      errors(await checker.check("from curve import draw_connected\ndraw_connected(200)\n")),
+    ).toEqual([]);
+    expect(
+      errors(await checker.check("from curve import draw_connected\ndraw_connected(200.5)\n")),
+    ).toHaveLength(1);
+  });
+
+  test("a callback gets a float, and may return an int or a float", async () => {
+    expect(
+      errors(
+        await checker.check(
+          "from sound import make_sound\nmake_sound(lambda t: 1, 2)\nmake_sound(lambda t: t * 0.5, 2)\n",
+        ),
+      ),
+    ).toEqual([]);
+    // a function that wants an int is called with a float
+    expect(
+      errors(
+        await checker.check(
+          "from sound import make_sound\ndef wave(t: int) -> float:\n    return 0.5\nmake_sound(wave, 2)\n",
+        ),
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  test("a result is a float: it is not an int", async () => {
+    expect(
+      errors(
+        await checker.check(
+          "from sound import get_duration, sine_sound\nd: int = get_duration(sine_sound(440, 1))\n",
+        ),
+      ).length,
+    ).toBeGreaterThan(0);
   });
 });

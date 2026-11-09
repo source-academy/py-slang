@@ -229,7 +229,7 @@ export const RUNE: ModuleDescription = {
     {
       name: "stackn",
       params: [
-        { name: "n", type: "number" },
+        { name: "n", type: "integer" },
         { name: "rune", type: { opaque: "Rune" } },
       ],
       returns: { opaque: "Rune" },

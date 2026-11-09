@@ -13,6 +13,7 @@ const Drawer = fun([Curve], opaque("CurveDrawn"));
  * TEMPORARY: the types of `curve`, written by hand from the module's declarations (functions.ts,
  * drawers.ts) and the plugin's (index.ts). A curve is a function, as in the module's documentation:
  * `unit_circle` is one, and `connect_ends` combines two. `compose` is not exported by the plugin.
+ * `num_points` is an `integer`: the drawers reject a number that is not whole.
  * To be removed when the module publishes its own description (source-academy/modules#996).
  */
 export const CURVE: ModuleDescription = {
@@ -135,7 +136,7 @@ export const CURVE: ModuleDescription = {
       "draw_3D_points",
       "draw_3D_points_full_view",
       "draw_3D_points_full_view_proportional",
-    ].map(name => fn(name, [["num_points", "number"]], Drawer)),
+    ].map(name => fn(name, [["num_points", "integer"]], Drawer)),
     ...["animate_curve", "animate_3D_curve"].map(name =>
       fn(
         name,
