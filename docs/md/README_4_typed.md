@@ -84,6 +84,9 @@ does not know the types in the pair: `head(x)` and `tail(x)` are objects, which 
 not use as a number, a list or a function, so `arity(tail(x))` is rejected even if the tail is a function.
 Annotate the parameter with the pair type that you expect (`x: Pair[int, Callable[[], int]]`) instead of
 `object`.
+The same holds for `is_list(x)`: afterwards the elements of `x` are objects, and the list cannot be
+changed (`x[0] = 5` and `x.append(5)` are rejected); declare the parameter with the list type instead
+(`x: list[int]`).
 
 ## Annotating your program
 
@@ -164,8 +167,8 @@ number that you give to a module, and `float` for a number that it gives back, a
 ## Types of the predeclared names
 
 `TypeIs[T]` means `bool`, and in addition narrows the type of the argument to `T`, and `NoReturn` is the result
-of a function that never returns (`error`; you cannot write it in a program either). `Any` appears only in the
-`TypeIs` of `is_list`, where any type is accepted (you cannot write `Any` in a program).
+of a function that never returns (`error`; you cannot write it in a program either). The `TypeIs` of `is_list` is a
+`Sequence[object]`, a list that is read and not changed; the messages call it `list[object]`.
 `tail` and `stream_tail` have two declarations: the first is for linked lists and streams, so that the tail of
 an `LList[int]` is an `LList[int]`, and the second is for any other pair.
 

@@ -37,7 +37,7 @@ export function groupsOf(prelude: string): { title: string; lines: string[] }[] 
           // the marker of positional-only parameters is noise for a student: `(x: int, /)` is `(x: int)`
           .replace(/,\s*\/(?=\s*[,)])/g, "")
           .replace(/\(\s*\/\s*,\s*/g, "(")
-          .replace(/\b_(Any|TypeIs|NoReturn)\b/g, "$1")
+          .replace(/\b_(Any|TypeIs|NoReturn|Sequence)\b/g, "$1")
           .trimEnd(),
       );
     }

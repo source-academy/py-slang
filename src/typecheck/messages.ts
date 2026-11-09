@@ -28,6 +28,14 @@ function widenLiterals(text: string): string {
   });
 }
 
+/**
+ * `Sequence[object]` is `list[object]`: it is what `is_list` finds in an object, declared as a Sequence
+ * (covariant, so that narrowing a union with a list keeps the list), but a student knows lists.
+ */
+function showLists(text: string): string {
+  return text.replace(/\bSequence\[object\]/g, "list[object]");
+}
+
 /** `H@head` is `H`: the type parameter of the function, which the student knows from the documentation. */
 function dropTypeParameterScopes(text: string): string {
   return text.replace(/\b_?([A-Z][A-Za-z]*)@\w+/g, "$1");
@@ -95,6 +103,18 @@ const REWRITES: { pattern: RegExp; message: (match: RegExpExecArray) => string }
     message: ([, type]) => `A condition must be a bool, but this is ${article(type)}`,
   },
   {
+    // x[0] = 5, after is_list(x) on an object
+    pattern: /^"__setitem__" method not defined on type "Sequence\[object\]"/,
+    message: () =>
+      "The elements of a list that is_list found in an object cannot be assigned: its type is not known. Declare the variable with a list type instead, as in x: list[int]",
+  },
+  {
+    // x.append(5), after is_list(x) on an object
+    pattern: /^Cannot access attribute "(.*)" for class "Sequence\[object\]"/,
+    message: ([, name]) =>
+      `${name} cannot be used on a list that is_list found in an object: its type is not known. Declare the variable with a list type instead, as in x: list[int]`,
+  },
+  {
     // pair(1, 2)[0]
     pattern: /^"__getitem__" method not defined on type "(Pair\[.*\])"/,
     message: ([, type]) => `A pair cannot be indexed (${type}): use head(...) and tail(...)`,
@@ -157,6 +177,7 @@ export function studentMessage(message: string): string {
       break;
     }
   }
+  text = showLists(text);
   if (canBeNone)
     text += ". The value can be None: test for that first, for example with is_none(...)";
   return text;

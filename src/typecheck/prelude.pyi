@@ -11,12 +11,12 @@
 # What students see of this file: Pair, LList, Stream, Callable and the functions. Everything that
 # starts with an underscore is private to the file, so `Any` and the type variables are not names
 # that a program can use.
-from typing import Any as _Any
 from typing import Callable as Callable
 from typing import Generic as _Generic
 from typing import NoReturn as _NoReturn
 from typing import TypeIs as _TypeIs
 from typing import TypeVar as _TypeVar
+from typing import Sequence as _Sequence
 from typing import overload as _overload
 from typing import final as _final
 
@@ -57,7 +57,9 @@ def is_complex(x: object, /) -> _TypeIs[complex]: ...
 def is_number(x: object, /) -> _TypeIs[int | float | complex]: ...
 def is_string(x: object, /) -> _TypeIs[str]: ...
 def is_function(x: object, /) -> _TypeIs[Callable[..., object]]: ...
-def is_list(x: object, /) -> _TypeIs[list[_Any]]: ...
+# A list that is read, not changed: Sequence is covariant, so a list[int] stays a list[int] when a union
+# with it is narrowed (list[object] would not do: list is invariant). Messages say list[object].
+def is_list(x: object, /) -> _TypeIs[_Sequence[object]]: ...
 
 # ── pairs and linked lists (linked-list.ts, linked-list.prelude.ts) ──────────
 

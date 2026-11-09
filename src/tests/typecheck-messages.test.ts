@@ -71,6 +71,25 @@ describe("messages for students", () => {
     );
   });
 
+  test("the list that is_list finds in an object is shown as list[object]", () => {
+    expect(studentMessage(`Type "Sequence[object]" is not assignable to declared type "int"`)).toBe(
+      `Type "list[object]" is not assignable to declared type "int"`,
+    );
+    // A list[object] of the student's own is not a Sequence[object]: its messages are not changed.
+    expect(studentMessage(`Cannot access attribute "appendd" for class "list[object]"`)).toBe(
+      `Cannot access attribute "appendd" for class "list[object]"`,
+    );
+  });
+
+  test("changing the list that is_list finds in an object: what to do", () => {
+    expect(studentMessage(`"__setitem__" method not defined on type "Sequence[object]"`)).toContain(
+      "cannot be assigned: its type is not known. Declare the variable with a list type",
+    );
+    expect(
+      studentMessage(`Cannot access attribute "append" for class "Sequence[object]"`),
+    ).toContain("append cannot be used on a list that is_list found in an object");
+  });
+
   test("indexing a pair", () => {
     expect(studentMessage(`"__getitem__" method not defined on type "Pair[int, int]"`)).toBe(
       "A pair cannot be indexed (Pair[int, int]): use head(...) and tail(...)",

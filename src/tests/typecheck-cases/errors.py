@@ -40,3 +40,9 @@ def head_of_object(x: object) -> str:
     return y
 def narrowed_pair(xs: LList[int]) -> int:
     return head(xs) if is_pair(xs) else 0
+def list_of_object(x: object) -> int:
+    if is_list(x):
+        x[0] = 5                                   # ERROR: cannot be assigned: its type is not known
+    return 0
+def list_or_int(x: int | list[int]) -> int:
+    return x[0] if is_list(x) else x
