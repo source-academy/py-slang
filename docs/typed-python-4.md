@@ -472,6 +472,13 @@ and is **settled**; the work in the `modules` repository is [#997](https://githu
 * Documentation: `README_4_typed.md` and a `run_jsdoc "Python §4 Typed" … "python_4_typed"` entry
   in `scripts/jsdoc.sh`, with a page on the type language (`Pair`, `LList`, `Stream`, `Callable`,
   generics) and the specification in `docs/specs`.
+  **Done**: `docs/md/README_4_typed.md` is the front page (the types, annotations, generics, what type errors
+  look like, the modules that can be imported, and the known limitation of numbers); the types of all
+  predeclared names are generated into it from `src/typecheck/prelude.pyi` (`scripts/typed-readme.ts`), so
+  that the documentation is what the checker uses. `scripts/jsdoc.sh` builds it as `python_4_typed`, and the
+  specification is `python_4_typed.pdf`. **Then**: the language-directory entry's `documentation.languageUrl`
+  points to the Python §4 page until this page is deployed; it is changed to `python_4_typed` in the next
+  version of the directory.
 * Frontend: no changes are expected, since languages come from the directory. Check this against
   the frontend's chapter/variant handling for Python before release.
 * Release: py-slang minor version, then language-directory, then a frontend bump of the directory

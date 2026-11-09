@@ -35,6 +35,9 @@ check_git_root() {
 run_jsdoc() {
   local name=$1
   local readme=$2
+  # a path of its own, if it is absolute (a generated page); else a file of docs/md
+  local readme_path="$MD/$readme"
+  if [[ "$readme" == /* ]]; then readme_path="$readme"; fi
   local dst_subfolder=$3
   shift 3
   local libs=$@
@@ -42,7 +45,7 @@ run_jsdoc() {
   echo "Building $name..."
   $JSDOC -r -t "$TMPL" \
          -c docs/jsdoc/conf.json \
-         -R "$MD/$readme" \
+         -R "$readme_path" \
          -d "$DST/$dst_subfolder" \
          $libs
   echo "Finished $name."
@@ -89,6 +92,13 @@ run() {
 
   # Python §4
   run_jsdoc "Python §4" "README_4.md" "python_4" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" "$LIB/pairmutator.js" "$LIB/list.js" "$LIB/stream.js" "$LIB/mce.js" &
+
+  # Python §4 Typed: its front page has the types of the predeclared names, taken from the declarations
+  # that the type checker uses (src/typecheck/prelude.pyi)
+  local typed_readme
+  typed_readme="$(mktemp -d)/README_4_typed.md"
+  yarn tsx scripts/typed-readme.ts "$MD/README_4_typed.md" src/typecheck/prelude.pyi "$typed_readme"
+  run_jsdoc "Python §4 Typed" "$typed_readme" "python_4_typed" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" "$LIB/pairmutator.js" "$LIB/list.js" "$LIB/stream.js" "$LIB/mce.js" &
 
   wait
 }
