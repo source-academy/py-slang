@@ -388,6 +388,12 @@ names a type.
   inspects (`is_tree`), and type parameters for a generic opaque type and its functions
   (`BinaryTree[A]`, `entry[A]`). All of them go when the modules publish their own descriptions
   (modules#996).
+* Numbers (decided with Martin, modules#996): the runtime turns a Python int into a JS number at the
+  boundary of a module, and a module's number comes back as a float; integers are not part of the module
+  interface. So `number` is `int | float` as a parameter (as the prelude's `math_*` are) and `float` as a
+  result, and a callback turns that around (it is given a float, and may return an int or a float).
+  `integer` marks a parameter that must be whole (`stackn`'s `n`, the `num_points` of the drawers of
+  `curve`): it is `int`, and is not allowed as a result.
 * Not yet: fetching a published description at run time (needs the format agreed in modules#996).
 
 ### Phase 5: language directory, documentation, release (≈ 3 days)
