@@ -61,7 +61,7 @@ export abstract class PyCseEvaluatorBase extends BasicEvaluator {
 
   /**
    * `beforeValidation` is called with each chunk once it is parsed, before it is validated: it may
-   * throw to reject the chunk, and change the program. Typed Python §4 checks the types there.
+   * throw to reject the chunk, and change the program. Python §4 Typed checks the types there.
    */
   protected constructor(
     conductor: IRunnerPlugin,
@@ -231,7 +231,7 @@ export class PyCseEvaluator3 extends PyCseEvaluatorBase {
   }
 }
 
-/** The groups of Python §4 (Typed Python §4 has them too). */
+/** The groups of Python §4 (Python §4 Typed has them too). */
 export const CSE_GROUPS_4: Group[] = [
   misc,
   math,

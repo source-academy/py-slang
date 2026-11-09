@@ -1,4 +1,4 @@
-# The types of the names that Typed Python §4 predeclares, beyond Python's own builtins
+# The types of the names that Python §4 Typed predeclares, beyond Python's own builtins
 # (`print`, `len`, `abs`, `max`, `min`, `round`, `input`, `repr`, `str`, `complex` have the types
 # that typeshed gives them). Pyright merges a project-root `__builtins__.pyi` into the builtins, so
 # a program needs no imports. The build (scripts/build-typecheck.ts) bakes this file into the

@@ -54,7 +54,7 @@ export class TypeCheckerUnavailableError extends Error {
   constructor(cause: unknown) {
     const reason = cause instanceof Error ? cause.message : String(cause);
     super(
-      `The type checker could not be started (${reason}). Typed Python §4 does not run a program ` +
+      `The type checker could not be started (${reason}). Python §4 Typed does not run a program ` +
         `that has not been checked: try again.`,
     );
     this.name = "TypeCheckerUnavailableError";

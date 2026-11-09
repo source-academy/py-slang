@@ -18,7 +18,7 @@ export type { ChunkChecker } from "./typed-chunk";
 export type { Severity, TypeDiagnostic } from "./diagnostics";
 
 /**
- * Typed Python §4 (docs/typed-python-4.md), the part that the parser's AST takes: checks the rules
+ * Python §4 Typed (docs/typed-python-4.md), the part that the parser's AST takes: checks the rules
  * on the annotations (`makeTypedChapter4Validators`, which throws on the first violation), then
  * erases the types, in place. The result is a Python §4 program, which is resolved with
  * `makeChapter4Validators()` and run by any engine as usual.

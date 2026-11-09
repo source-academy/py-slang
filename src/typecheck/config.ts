@@ -1,5 +1,5 @@
 /**
- * The configuration of pyright for Typed Python §4 (`pyrightconfig.json`): basedpyright's
+ * The configuration of pyright for Python §4 Typed (`pyrightconfig.json`): basedpyright's
  * `standard` mode, with the rules that follow from the specification (docs/typed-python-4.md):
  *
  * - Nothing may have an unknown type: a lambda whose parameters are not given a type by its context,

@@ -4,7 +4,7 @@ import type { StaticTypeError } from "../typecheck/errors";
 import { EvaluatorError } from "./errors";
 
 /**
- * How a type error of Typed Python §4 is reported to the host, by any evaluator: with its line and
+ * How a type error of Python §4 Typed is reported to the host, by any evaluator: with its line and
  * column, and as a type error. (This is apart from ./typed.ts, which has the checker: an evaluator
  * of plain Python §4 reports these too, and is not to contain the checker for that.)
  */

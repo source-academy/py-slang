@@ -1,5 +1,5 @@
 /**
- * Typed Python §4 on the CSE machine and in the environment stepper (as on py2js, see
+ * Python §4 Typed on the CSE machine and in the environment stepper (as on py2js, see
  * typecheck-evaluator.test.ts): the type checker runs first, with whichever engine the student chose,
  * and a program with type errors is not run (or stepped), and each error is shown with its place.
  */
@@ -37,7 +37,7 @@ function mockConductor(plugin: object) {
   return { conductor, errors, outputs };
 }
 
-describe("Typed Python §4 on the CSE machine", () => {
+describe("Python §4 Typed on the CSE machine", () => {
   let checker: TypedPythonChecker;
   beforeEach(async () => {
     checker = await startTypedChecker();
@@ -94,7 +94,7 @@ describe("Typed Python §4 on the CSE machine", () => {
     ]);
   });
 
-  test("a function without annotations is rejected by the rules of Typed Python §4", async () => {
+  test("a function without annotations is rejected by the rules of Python §4 Typed", async () => {
     const { run, errors, outputs } = cse();
     await run("def f(x):\n    return x\nprint(1)");
     expect(outputs).toEqual([]);
@@ -126,7 +126,7 @@ describe("Typed Python §4 on the CSE machine", () => {
   });
 });
 
-describe("Typed Python §4 in the environment stepper", () => {
+describe("Python §4 Typed in the environment stepper", () => {
   let checker: TypedPythonChecker;
   beforeEach(async () => {
     checker = await startTypedChecker();

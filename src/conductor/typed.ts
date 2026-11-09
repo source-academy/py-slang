@@ -2,7 +2,7 @@ import type { StmtNS } from "../ast-types";
 import { checkTypedChunk, checkTypedProgram, type ChunkChecker } from "../typecheck";
 
 /**
- * What every evaluator of Typed Python §4 does, whichever engine runs the program (py2js, the CSE
+ * What every evaluator of Python §4 Typed does, whichever engine runs the program (py2js, the CSE
  * machine, the environment stepper): the chunk is parsed, then, as the first step of validating it,
  * the types are checked: the chunk is rejected, or it is turned into a chunk of Python §4. The engine
  * then validates and runs it as it always does. An evaluator of Python §4 takes this as the option

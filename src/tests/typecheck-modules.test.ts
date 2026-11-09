@@ -113,7 +113,7 @@ describe("programs that import a module", () => {
   test("a module with no description cannot be imported, and the message says why", async () => {
     const [error] = errors(await checker.check("from nothing import x\n"));
     expect(error.message).toBe(
-      "The module nothing cannot be imported: its types are not known to Typed Python §4",
+      "The module nothing cannot be imported: its types are not known to Python §4 Typed",
     );
   });
 

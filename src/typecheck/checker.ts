@@ -89,7 +89,7 @@ export interface ProposedChunk {
 }
 
 /**
- * The type checker of Typed Python §4: pyright, in a worker, with Source Python's builtins and
+ * The type checker of Python §4 Typed: pyright, in a worker, with Source Python's builtins and
  * prelude (see src/typecheck/bundler/). Give it the program as it is written, with its annotations:
  * the program's line numbers are the diagnostics' line numbers.
  */

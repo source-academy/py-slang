@@ -2,7 +2,7 @@ import { StmtNS } from "../../ast-types";
 import { ASTNode, FeatureValidator, MissingTypeAnnotationError } from "../types";
 
 /**
- * Typed Python §4: every `def` annotates each of its parameters and its return type. (The parameters
+ * Python §4 Typed: every `def` annotates each of its parameters and its return type. (The parameters
  * of a lambda cannot be annotated, as in Python; their types come from the context.)
  */
 export const RequireTypeAnnotationsValidator: FeatureValidator = {

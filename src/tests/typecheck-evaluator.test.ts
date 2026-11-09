@@ -1,5 +1,5 @@
 /**
- * The Typed Python §4 evaluator (src/conductor/TypedPy2JsEvaluator.ts), with a conductor that records
+ * The Python §4 Typed evaluator (src/conductor/TypedPy2JsEvaluator.ts), with a conductor that records
  * what it is sent, and the real checker in a worker thread.
  */
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
@@ -49,7 +49,7 @@ function makeEvaluator(checker: ChunkChecker) {
   };
 }
 
-describe("the Typed Python §4 evaluator", () => {
+describe("the Python §4 Typed evaluator", () => {
   let checker: TypedPythonChecker;
   beforeEach(async () => {
     checker = await startTypedChecker();
@@ -104,7 +104,7 @@ describe("the Typed Python §4 evaluator", () => {
     ]);
   });
 
-  test("a function without annotations is rejected by the rules of Typed Python §4, with its place", async () => {
+  test("a function without annotations is rejected by the rules of Python §4 Typed, with its place", async () => {
     const { run, outputs, errors } = makeEvaluator(checker);
     await run("def f(x: int, y) -> int:\n    return x\nprint(1)\n");
     expect(outputs).toEqual([]);
@@ -162,7 +162,7 @@ describe("the Typed Python §4 evaluator", () => {
     expect(outputs).toEqual(["1"]);
   });
 
-  test("a program that is not Typed Python (types that are wrong at run time) is not a concern of the checker", async () => {
+  test("a program that is not Python §4 Typed (types that are wrong at run time) is not a concern of the checker", async () => {
     const { run, outputs, errors } = makeEvaluator(checker);
     // 1 / 0 has no static error; it fails when it runs, as in Python §4.
     await run("def f(n: int) -> float:\n    return 1 / n\nprint(f(0))\n");

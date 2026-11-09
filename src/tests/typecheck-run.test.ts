@@ -6,7 +6,7 @@
  *
  * With `CPYTHON_PATH` set to a `python3` (3.12 or later: the programs use `def f[A]`), the programs run
  * unchanged under CPython with `from sicp import *`, with the type names of python/sicp, and print the
- * same: Typed Python §4 programs are Python programs.
+ * same: Python §4 Typed programs are Python programs.
  */
 import { spawnSync } from "child_process";
 import { readdirSync, readFileSync } from "fs";
@@ -23,7 +23,7 @@ describe("the correct programs run", () => {
   const realParse = parserAdapter.parse;
   beforeAll(() => {
     // The engines parse the text that they are given: erase the types of what they parse, as the
-    // Typed Python §4 evaluator will.
+    // Python §4 Typed evaluator will.
     jest
       .spyOn(parserAdapter, "parse")
       .mockImplementation((source: string) => eraseTypes(realParse(source)));
