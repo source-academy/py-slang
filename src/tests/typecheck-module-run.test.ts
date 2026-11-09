@@ -1,0 +1,90 @@
+/**
+ * A program of Python §4 Typed that imports a module: checked against the module's description, then
+ * (with the types erased) run with the module that the loader provides. The module is a fake `rune`
+ * (as in py2js-from-import.test.ts) with the names that the description has.
+ */
+import { DataType, type TypedValue } from "@sourceacademy/conductor/types";
+import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
+import { GenericDataHandler } from "../conductor/GenericDataHandler";
+import { typedBeforeValidation } from "../conductor/typed";
+import { Py2JsSession } from "../engines/py2js";
+import { StaticTypeErrors, type TypedPythonChecker } from "../typecheck";
+import { CHECKER_SETUP_TIMEOUT_MS, startTypedChecker } from "./typecheck-harness";
+
+jest.setTimeout(60_000);
+
+let checker: TypedPythonChecker;
+beforeAll(async () => {
+  checker = await startTypedChecker();
+}, CHECKER_SETUP_TIMEOUT_MS);
+afterAll(() => checker.dispose());
+afterEach(() => {
+  ModuleLoaderRunnerPlugin.instance = null;
+});
+
+/** `rune` with `heart` and `scale(ratio, rune)`, which gives a rune that remembers its scale. */
+async function setUp() {
+  const dh = new GenericDataHandler(4);
+  const heart = await dh.opaque_make({ scale: 1 });
+  async function* scaleFunc(
+    ratio: TypedValue<DataType>,
+    rune: TypedValue<DataType>,
+  ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+    await Promise.resolve();
+    const inner = await dh.opaque_get(rune as TypedValue<DataType.OPAQUE>);
+    return dh.opaque_make({
+      scale: (inner as { scale: number }).scale * (ratio as TypedValue<DataType.NUMBER>).value,
+    });
+  }
+  const scale = await dh.closure_make(
+    { returnType: DataType.OPAQUE, args: [DataType.NUMBER, DataType.OPAQUE] },
+    scaleFunc,
+  );
+  ModuleLoaderRunnerPlugin.instance = {
+    requestModule: (name: string) =>
+      name === "rune"
+        ? Promise.resolve({
+            exports: [
+              { symbol: "heart", value: heart },
+              { symbol: "scale", value: scale },
+            ],
+          })
+        : Promise.reject(new Error(`no such module: ${name}`)),
+  } as unknown as ModuleLoaderRunnerPlugin;
+  const outputs: string[] = [];
+  const session = new Py2JsSession(4, {
+    onOutput: line => outputs.push(line),
+    dataHandler: dh,
+    beforeValidation: typedBeforeValidation(checker),
+  });
+  return { session, outputs };
+}
+
+test("a correct program that imports a module is checked, and then run with the module", async () => {
+  const { session, outputs } = await setUp();
+  await session.runChunk(
+    "from rune import heart, scale\nsmaller = scale(0.5, heart)\nprint(smaller is not heart)\n",
+  );
+  expect(outputs).toEqual(["True"]);
+});
+
+test("a type mistake in the use of a module is reported before anything runs", async () => {
+  const { session, outputs } = await setUp();
+  const run = session.runChunk(
+    "from rune import heart, scale\nprint('before')\nscale(heart, 0.5)\n",
+  );
+  await expect(run).rejects.toBeInstanceOf(StaticTypeErrors);
+  await expect(run).rejects.toThrow(/2 type errors|scale expects/);
+  expect(outputs).toEqual([]);
+});
+
+test("a module that has no description cannot be imported", async () => {
+  const { session } = await setUp();
+  const error = await session
+    .runChunk("from physics import gravity\nprint(gravity)\n")
+    .catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(StaticTypeErrors);
+  expect((error as StaticTypeErrors).errors.map(e => e.message)).toContainEqual(
+    expect.stringContaining("The module physics cannot be imported: its types are not known"),
+  );
+});
