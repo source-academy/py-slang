@@ -290,6 +290,13 @@ describe("descriptions that make a stub that does not check", () => {
       }),
     ).toThrow(/int cannot be the name of a type parameter/);
     expect(() =>
+      toStub({
+        ...base,
+        opaqueTypes: ["T"],
+        functions: [{ name: "f", typeParameters: ["T"], params: [], returns: { opaque: "T" } }],
+      }),
+    ).toThrow(/type parameter T of f has the name of an opaque type/);
+    expect(() =>
       toStub({ ...base, functions: [{ name: "list", params: [], returns: "void" }] }),
     ).toThrow(/list cannot be the name of a function/);
     expect(() =>

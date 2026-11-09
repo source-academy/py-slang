@@ -214,7 +214,14 @@ export function toStub(description: ModuleDescription): string {
   for (const { name, params, typeParameters } of description.functions) {
     checkName(name, "a function");
     for (const parameter of params) checkName(parameter.name, "a parameter");
-    for (const parameter of typeParameters ?? []) checkName(parameter, "a type parameter");
+    for (const parameter of typeParameters ?? []) {
+      checkName(parameter, "a type parameter");
+      // `def f[T]() -> T` would turn a reference to an opaque type `T` into one to the parameter.
+      if (opaque.has(parameter))
+        throw new UnknownDescriptionError(
+          `the type parameter ${parameter} of ${name} has the name of an opaque type`,
+        );
+    }
   }
   for (const { name } of description.constants) checkName(name, "a constant");
   const lines = [
