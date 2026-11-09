@@ -16,6 +16,11 @@ import { runCode } from "../runner";
 const UNLIMITED = { heap: null, maxSize: Infinity };
 
 const FOREVER = "def f(n):\n    return 1 + f(n + 1)\nprint(f(0))\n";
+// The e-stepper keeps every step, and each step holds the whole program term, which nests one level
+// deeper per call: with FOREVER it ran to the end of the JavaScript stack in 50 s and 3.7 GB, and
+// went over the heap limit of CI. A call that nests 64 levels reaches the end of the stack in far
+// fewer calls (8 s, 1.3 GB).
+const FOREVER_NESTED = `def f(n):\n    return ${"1 + (".repeat(64)}f(n + 1)${")".repeat(64)}\nprint(f(0))\n`;
 const MUTUALLY = "def f(n):\n    return 1 + g(n)\ndef g(n):\n    return 2 + f(n)\nprint(f(0))\n";
 
 const message = async (run: () => unknown): Promise<string> => {
@@ -77,7 +82,14 @@ test("wasm", async () => {
 describe("the e-stepper", () => {
   // (The JavaScript stack runs out at a depth that depends on the host, so the trace ends there.)
   test("a recursion without end", async () => {
-    const run = await runEStepper(parse(FOREVER), FOREVER, 3, 100000, undefined, UNLIMITED);
+    const run = await runEStepper(
+      parse(FOREVER_NESTED),
+      FOREVER_NESTED,
+      3,
+      100000,
+      undefined,
+      UNLIMITED,
+    );
     expect(run.truncated).toBe(false);
     expect(run.error).toBe(RECURSION_ERROR_MESSAGE);
     const explanations = run.steps.slice(-2).map(s => s.markers?.[0]?.explanation);
