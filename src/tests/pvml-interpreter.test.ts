@@ -1108,6 +1108,37 @@ loop()
       expect(() => compileAndRun("math_ldexp(1.0, 10**30)\n")).toThrow(/OverflowError/);
     });
 
+    test("math_nextafter and math_ulp, with the results of CPython 3.14", () => {
+      expect(
+        compileAndRun(
+          [
+            "print(math_nextafter(1.0, 2.0))",
+            "print(math_nextafter(1, 2, 3))",
+            "print(math_nextafter(0.0, -1.0, 2))",
+            "print(math_nextafter(1.0, 2.0, 0))",
+            "print(math_nextafter(1.0, 1.0000000000000004, 5))",
+            "print(math_ulp(1.0))",
+            "print(math_ulp(0.0))",
+            "print(math_ulp(1.7976931348623157e308))",
+            "",
+          ].join("\n"),
+        ),
+      ).toEqual([
+        "1.0000000000000002",
+        "1.0000000000000007",
+        "-1e-323",
+        "1.0",
+        "1.0000000000000004",
+        "2.220446049250313e-16",
+        "5e-324",
+        "1.99584030953472e+292",
+      ]);
+    });
+
+    test("math_nextafter rejects a negative number of steps", () => {
+      expect(() => compileAndRun("math_nextafter(1.0, 2.0, -1)\n")).toThrow(/ValueError/);
+    });
+
     test("time_time() returns seconds, not milliseconds", () => {
       const before = Date.now() / 1000;
       const outputs = compileAndRun("print(time_time())\n");
