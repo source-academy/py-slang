@@ -30,8 +30,8 @@ describe("messages for students", () => {
   });
 
   test("a type parameter is shown without the function that it belongs to", () => {
-    expect(studentMessage(`Cannot use "Pair[H@head, Any]" here`)).toBe(
-      `Cannot use "Pair[H, Any]" here`,
+    expect(studentMessage(`Cannot use "Pair[H@head, T@head]" here`)).toBe(
+      `Cannot use "Pair[H, T]" here`,
     );
     expect(studentMessage(`Cannot use "_T@Pair"`)).toBe(`Cannot use "T"`);
   });
@@ -54,10 +54,10 @@ describe("messages for students", () => {
   test("the type of a linked list that can be None: a hint", () => {
     expect(
       studentMessage(
-        `Argument of type "LList[int]" cannot be assigned to parameter "p" of type "Pair[H@head, Any]" in function "head"\n  Type "LList[int]" is not assignable to type "Pair[int, Any]"\n    "None" is not assignable to "Pair[int, Any]"`,
+        `Argument of type "LList[int]" cannot be assigned to parameter "p" of type "Pair[H@head, T@head]" in function "head"\n  Type "LList[int]" is not assignable to type "Pair[int, T@head]"\n    "None" is not assignable to "Pair[int, T@head]"`,
       ),
     ).toBe(
-      "head expects p to be Pair[H, Any], but got LList[int]. The value can be None: test for that first, for example with is_none(...)",
+      "head expects p to be Pair[H, T], but got LList[int]. The value can be None: test for that first, for example with is_none(...)",
     );
   });
 
