@@ -141,6 +141,29 @@ describe("the stub that a description becomes", () => {
     expect(stub).toContain("def twice(xs: list[float], /) -> list[float]: ...");
   });
 
+  test("the elements of a linked list and of a pair are the same going in and coming out, as pairs are invariant", () => {
+    const stub = toStub({
+      version: 1,
+      module: "lists",
+      opaqueTypes: [],
+      functions: [
+        {
+          name: "reverse",
+          params: [{ name: "xs", type: { list: "number" } }],
+          returns: { list: "number" },
+        },
+        {
+          name: "swap",
+          params: [{ name: "p", type: { pair: ["number", "string"] } }],
+          returns: { pair: ["string", "number"] },
+        },
+      ],
+      constants: [],
+    });
+    expect(stub).toContain("def reverse(xs: _LList[float], /) -> _LList[float]: ...");
+    expect(stub).toContain("def swap(p: _Pair[float, str], /) -> _Pair[str, float]: ...");
+  });
+
   test("the argument of an opaque type is the same going in and coming out, as the type is invariant", () => {
     const box = (type: TypeDescription): TypeDescription => ({ opaque: "Box", arguments: [type] });
     const stub = toStub({

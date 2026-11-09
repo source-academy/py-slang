@@ -88,7 +88,7 @@ const turned = (direction: Direction): Direction => (direction === "in" ? "out" 
  * becomes a JS number, a module's number comes back as a float, and integers are not part of the module
  * interface. So `number` is `int | float` going in (as the prelude's `math_*` are), and `float` coming out;
  * `integer` marks a parameter that must be whole, and is `int` going in. It is not a result: a result
- * comes back as a float. In an array and in the arguments of an opaque type, which are invariant, a number
+ * comes back as a float. In an array, a linked list, a pair and in the arguments of an opaque type, which are invariant, a number
  * is `float` both ways: a value that a module returns can be passed back to it.
  */
 function pythonType(
@@ -137,9 +137,9 @@ function pythonType(
       throw new UnknownDescriptionError(`the type parameter ${type.parameter} is not declared`);
     return type.parameter;
   }
-  if ("list" in type) return `_LList[${pythonType(type.list, scope, direction, exact)}]`;
+  if ("list" in type) return `_LList[${pythonType(type.list, scope, direction, true)}]`;
   if ("pair" in type)
-    return `_Pair[${pythonType(type.pair[0], scope, direction, exact)}, ${pythonType(type.pair[1], scope, direction, exact)}]`;
+    return `_Pair[${pythonType(type.pair[0], scope, direction, true)}, ${pythonType(type.pair[1], scope, direction, true)}]`;
   if ("array" in type) return `list[${pythonType(type.array, scope, direction, true)}]`;
   if ("function" in type) {
     const params = type.function.params
