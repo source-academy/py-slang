@@ -4,7 +4,7 @@ import { CSE_GROUPS_4, PyCseEvaluatorBase } from "./PyCseEvaluator";
 import { typedBeforeValidation } from "./typed";
 
 /**
- * Typed Python §4 on the CSE machine: each chunk is checked (see TypedPy2JsEvaluator.ts for what
+ * Python §4 Typed on the CSE machine: each chunk is checked (see TypedPy2JsEvaluator.ts for what
  * that is), and runs, with its types erased, as a chunk of Python §4 on the CSE machine, whose tab
  * shows its steps. A chunk with type errors is not run: each error is shown, with its line.
  */

@@ -4,7 +4,7 @@ import type { TypeDiagnostic } from "./diagnostics";
 import { TypeCheckerUnavailableError } from "./errors";
 import type { ChunkChecker } from "./typed-chunk";
 
-/** Where the worker of the Typed Python §4 checker is published: next to the evaluators. */
+/** Where the worker of the Python §4 Typed checker is published: next to the evaluators. */
 export const TYPED_PY4_CHECKER_URL = "https://source-academy.github.io/py-slang/TypedPy4Checker.js";
 
 /**

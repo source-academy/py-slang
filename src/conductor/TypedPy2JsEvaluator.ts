@@ -5,11 +5,11 @@ import { sendStaticTypeErrors } from "./staticTypeErrors";
 import { typedBeforeValidation } from "./typed";
 
 /**
- * Typed Python §4 (docs/typed-python-4.md): Python §4 with type annotations, checked before the
+ * Python §4 Typed (docs/typed-python-4.md): Python §4 with type annotations, checked before the
  * program runs, and run by the py2js engine with the types erased.
  *
  * Each chunk (the program, and then what is typed in the REPL) goes through
- * {@link checkTypedChunk} before it is resolved and compiled: the rules of Typed Python §4 on its
+ * {@link checkTypedChunk} before it is resolved and compiled: the rules of Python §4 Typed on its
  * annotations, the type checker (pyright, in a worker of its own, which loads while the student
  * types), and the erasure of the types. A chunk with type errors is not run; every error is sent,
  * with its line and column, like the errors of any other evaluator. The checker keeps the chunks

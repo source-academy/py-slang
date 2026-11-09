@@ -27,7 +27,7 @@ export abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
 
   /**
    * `beforeValidation` is called with each chunk once it is parsed, before it is validated: it may
-   * throw to reject the chunk, and change the program. Typed Python §4 checks the types there.
+   * throw to reject the chunk, and change the program. Python §4 Typed checks the types there.
    */
   protected constructor(
     conductor: IRunnerPlugin,

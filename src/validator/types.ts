@@ -23,7 +23,7 @@ export class FeatureNotSupportedError extends Error {
   }
 }
 
-/** Typed Python §4: a `def` without the annotation that it needs. Located at `token`. */
+/** Python §4 Typed: a `def` without the annotation that it needs. Located at `token`. */
 export class MissingTypeAnnotationError extends Error {
   token: Token;
 

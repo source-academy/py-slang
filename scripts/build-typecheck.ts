@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Builds the worker of the Typed Python §4 type checker: dist/TypedPy4Checker.js (see
+ * Builds the worker of the Python §4 Typed type checker: dist/TypedPy4Checker.js (see
  * src/typecheck/bundler/). `--force` builds it even if it is up to date.
  */
 import { buildTypedPython4Checker } from "../src/typecheck/bundler/typed4";

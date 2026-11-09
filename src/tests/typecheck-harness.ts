@@ -6,7 +6,7 @@ import { TypedPythonChecker } from "../typecheck";
 export const CHECKER_SETUP_TIMEOUT_MS = 300_000;
 
 /**
- * Starts the Typed Python §4 checker in a Node worker thread, building its worker first if it is
+ * Starts the Python §4 Typed checker in a Node worker thread, building its worker first if it is
  * missing or out of date (`yarn build:typecheck` does that too). Dispose of it when done.
  */
 export async function startTypedChecker(): Promise<TypedPythonChecker> {

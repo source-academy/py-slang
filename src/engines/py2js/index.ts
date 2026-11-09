@@ -421,7 +421,7 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    * Called with each chunk of the program (not with the group preludes) once it is parsed, and its
    * local imports are bundled: `script` is the text that `ast` was parsed from. It runs before the
    * chunk is validated (resolved), may throw to reject the chunk (the error is thrown from runChunk as it is),
-   * and may change `ast` in place. Typed Python §4 checks the types of a chunk here and erases them
+   * and may change `ast` in place. Python §4 Typed checks the types of a chunk here and erases them
    * (src/conductor/TypedPy2JsEvaluator.ts).
    */
   beforeValidation?: (

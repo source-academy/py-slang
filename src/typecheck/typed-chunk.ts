@@ -14,7 +14,7 @@ export interface ChunkChecker {
 }
 
 /**
- * Typed Python §4 rules on the annotations (`makeTypedChapter4Validators`): the first violation
+ * Python §4 Typed rules on the annotations (`makeTypedChapter4Validators`): the first violation
  * is thrown. The program is not changed.
  */
 export function validateTypedProgram(program: StmtNS.Stmt): void {
@@ -29,11 +29,11 @@ function rejectErrors(diagnostics: TypeDiagnostic[]): void {
 }
 
 /**
- * Turns a chunk of Typed Python §4 into a chunk of Python §4, or rejects it, for an engine that keeps
+ * Turns a chunk of Python §4 Typed into a chunk of Python §4, or rejects it, for an engine that keeps
  * a session (py2js, the CSE machine): the chunk can use the names, and the types, of the chunks before
  * it. In this order:
  *
- * 1. the rules of Typed Python §4 on the annotations: the first violation is thrown (they are quick,
+ * 1. the rules of Python §4 Typed on the annotations: the first violation is thrown (they are quick,
  *    and what a student should fix first);
  * 2. the type checker, with the text as the student wrote it (`source`): all its errors are thrown
  *    together, as {@link StaticTypeErrors};

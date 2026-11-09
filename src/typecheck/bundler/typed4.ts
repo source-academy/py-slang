@@ -1,5 +1,5 @@
 /**
- * Builds the worker of the Typed Python §4 checker (dist/TypedPy4Checker.js): pyright with Source
+ * Builds the worker of the Python §4 Typed checker (dist/TypedPy4Checker.js): pyright with Source
  * Python's typeshed, the prelude and the configuration embedded. See bundle.ts. Used by
  * scripts/build-typecheck.ts, and by the tests, which build it when it is missing or out of date.
  *

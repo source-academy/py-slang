@@ -1,16 +1,16 @@
-# Typed Python §4
+# Python §4 Typed
 
 Status: project plan. Phase 0 (language design) in progress: the specification draft is
 `docs/specs/python_4_typed.tex` (with `python_4_typed_bnf.tex` and `python_static_typing.tex`).
 
 ## Goal
 
-Add a new Source Academy language, **Typed Python §4**: Python §4 plus type annotations, checked
+Add a new Source Academy language, **Python §4 Typed**: Python §4 plus type annotations, checked
 statically before the program runs. It is listed in the language directory next to Python §4, runs
 SICPy §1–§4 programs once they are annotated, and reports type errors with line and column, like
 any other Source error.
 
-A type-correct Typed Python §4 program, with its annotations erased, is an ordinary Python §4
+A type-correct Python §4 Typed program, with its annotations erased, is an ordinary Python §4
 program, and it behaves exactly as one. The type checker only accepts or rejects programs; it never
 changes what they do. Annotated programs are also valid CPython 3.13, so the CPython parity harness
 still applies, provided the `sicp` package defines the type names as well (`Pair`, `LList`,
@@ -120,7 +120,7 @@ SICPy §4 represents programs as tagged linked lists, e.g. `llist("application",
 frontend (unchanged)
   └─ evaluator worker: TypedPy2JsEvaluator4.js           (blob: URL, created by the frontend)
        ├─ py-slang parse + Python §4 validators            (annotations allowed)
-       ├─ Typed Python checker client  ──postMessage──►  checker worker (pyright, ~4.7 MB, lazy)
+       ├─ Python §4 Typed checker client  ──postMessage──►  checker worker (pyright, ~4.7 MB, lazy)
        │     file system = Source builtins.pyi + prelude      └─ background analysis worker
        │                   + module stubs + program files
        └─ on no errors: Py2JsSession(variant 4) runs the program (annotations ignored)
@@ -150,7 +150,7 @@ frontend (unchanged)
 ### Phase 0: language design (≈ 3 days)
 
 Settle the rules in the table above and the §4 evaluator question, with the SICPy authors.
-Output: this document, revised and merged, and a draft of the Typed Python §4 specification
+Output: this document, revised and merged, and a draft of the Python §4 Typed specification
 (`docs/specs`, like the other chapters).
 
 Done so far:
@@ -373,6 +373,18 @@ them into the checker's file system. As a stop-gap, hand-write stubs for `rune`,
 and `binary_tree`. A module without a stub is not resolved: the import is an error, as there is no `Any` to give its
 names a type.
 
+**Done so far (first part of phase 4):**
+
+* `src/typecheck/module-description.ts`: the description format (version 1: `number`, `integer`, `string`,
+  `boolean`, `void`, opaque types, `list`, `pair`, `array`, `function`) and `toStub`, the mapper to a Python
+  stub. An unknown version or kind is rejected with a message that says so.
+* The checker gives the stub of each module that a program imports (`from rune import show`) to pyright as
+  `rune.pyi`, once, for checks and for REPL chunks. A module with no description is the error "The module
+  X cannot be imported: its types are not known to Python §4 Typed".
+* `src/typecheck/modules/`: the temporary description of `rune`. `curve`, `sound` and `binary_tree` follow,
+  and all of them go when the modules publish their own descriptions (modules#996).
+* Not yet: fetching a published description at run time (needs the format agreed in modules#996).
+
 ### Phase 5: language directory, documentation, release (≈ 3 days)
 
 * language-directory: add `src/languages/python/python4Typed.ts` and register it in
@@ -388,7 +400,7 @@ names a type.
 
   export const python4TypedLanguage: ILanguageDefinition = {
       id: "python4Typed",
-      name: "Typed Python §4",
+      name: "Python §4 Typed",
       textbook: { url: "https://sicp.sourceacademy.org/json_py/", name: "SICPy", route: "/sicpy",
                   titleImageUrl: "https://source-academy.github.io/sicp/sicpy.png" },
       documentation: { languageUrl: "https://docs.sourceacademy.org/python/python_4_typed/" },
@@ -399,7 +411,7 @@ names a type.
   };
   ```
 
-* Documentation: `README_4_typed.md` and a `run_jsdoc "Typed Python §4" … "python_4_typed"` entry
+* Documentation: `README_4_typed.md` and a `run_jsdoc "Python §4 Typed" … "python_4_typed"` entry
   in `scripts/jsdoc.sh`, with a page on the type language (`Pair`, `LList`, `Stream`, `Callable`,
   generics) and the specification in `docs/specs`.
 * Frontend: no changes are expected, since languages come from the directory. Check this against
@@ -415,7 +427,7 @@ names a type.
 * **Full Python with types**: #632. Use the full typeshed bundle and CPython's builtins,
   together with the Pyodide evaluator.
 
-Typed Python §1–§3 are not planned.
+Python §1–§3 Typed are not planned.
 
 ## Effort
 
