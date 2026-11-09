@@ -17,7 +17,7 @@ const declarations = declarationsOf(prelude, helpers);
 describe("a declaration", () => {
   test("is parsed into its type parameters, parameters and result", () => {
     expect(
-      parseDeclaration("def map[A, B](f: Callable[[A], B], xs: LList[A], /) -> LList[B]"),
+      parseDeclaration("def map[A, B](f: Callable[[A], B], xs: LList[A]) -> LList[B]"),
     ).toEqual({
       name: "map",
       typeParameters: ["A", "B"],
@@ -92,7 +92,7 @@ describe("the appendix of the types of the predeclared names", () => {
   test("lists the declarations of the checker, in listings", () => {
     const tex = typesAppendix(prelude);
     expect(tex).toContain("\\subsection*{pairs and linked lists}");
-    expect(tex).toContain("def head[H](p: Pair[H, Any], /) -> H");
+    expect(tex).toContain("def head[H](p: Pair[H, Any]) -> H");
     expect(tex).toContain("math_pi: float");
   });
 });

@@ -17,9 +17,9 @@ describe("the types of the predeclared names in the documentation of Python §4 
       "streams",
       "math",
     ]);
-    expect(lines).toContain("def head[H](p: Pair[H, Any], /) -> H");
-    expect(lines).toContain("def map[A, B](f: Callable[[A], B], xs: LList[A], /) -> LList[B]");
-    expect(lines).toContain("def is_none(x: object, /) -> TypeIs[None]");
+    expect(lines).toContain("def head[H](p: Pair[H, Any]) -> H");
+    expect(lines).toContain("def map[A, B](f: Callable[[A], B], xs: LList[A]) -> LList[B]");
+    expect(lines).toContain("def is_none(x: object) -> TypeIs[None]");
     expect(lines).toContain("math_pi: float");
   });
 
@@ -30,7 +30,7 @@ describe("the types of the predeclared names in the documentation of Python §4 
 
   test("have the HTML escaped", () => {
     const html = renderTypes(prelude);
-    expect(html).toContain("def head[H](p: Pair[H, Any], /) -&gt; H");
+    expect(html).toContain("def head[H](p: Pair[H, Any]) -&gt; H");
     expect(html).not.toMatch(/-> H/);
   });
 
@@ -61,9 +61,9 @@ describe("the types of the modules in the documentation of Python §4 Typed", ()
   test("show the names with their Python types, and the types that a module defines", () => {
     const html = renderModules(descriptions, docs);
     expect(html).toContain("<h3>rune</h3>");
-    expect(html).toContain("def beside(rune1: Rune, rune2: Rune, /) -&gt; Rune");
+    expect(html).toContain("def beside(rune1: Rune, rune2: Rune) -&gt; Rune");
     expect(html).toContain("<code>BinaryTree[A]</code>: a binary tree");
-    expect(html).toContain("def entry[A](t: BinaryTree[A], /) -&gt; A");
+    expect(html).toContain("def entry[A](t: BinaryTree[A]) -&gt; A");
     expect(html).toContain("heart: Rune");
     // the private helpers of the stubs are not shown
     expect(html).not.toMatch(/\b_(Callable|LList|Pair)\b/);
