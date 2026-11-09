@@ -422,30 +422,20 @@ and is **settled**; the work in the `modules` repository is [#997](https://githu
   including the shapes that a module exports dynamically. It describes the TypeScript API, not the
   conductor-level surface that Python sees, so it can feed the generator but is not relied on alone.
 
-**Done so far (first part of phase 4):**
+**Done so far (phase 4, in py-slang):**
 
-* `src/typecheck/module-description.ts`: the description format (version 1: `number`, `integer`, `string`,
-  `boolean`, `void`, opaque types, `list`, `pair`, `array`, `function`) and `toStub`, the mapper to a Python
-  stub. An unknown version or kind is rejected with a message that says so.
-* The checker gives the stub of each module that a program imports (`from rune import show`) to pyright as
-  `rune.pyi`, once, for checks and for REPL chunks. A module with no description is the error "The module
-  X cannot be imported: its types are not known to Python §4 Typed".
+* `src/typecheck/module-description.ts`: the description format (version 1) and `toStub`, the mapper to a
+  Python stub; an unknown version or kind, a name that the stub uses for a type, or a stub that does not
+  check, is reported (and the program is not checked against it).
+* The checker gives the stub of each module that a program imports to pyright, once, for checks and for
+  REPL chunks. A module with no description is the error "The module X cannot be imported: its types are
+  not known to Python §4 Typed". A test runs a typed program that imports a module through the checker and
+  the py2js session.
 * `src/typecheck/modules/`: the temporary descriptions of `rune`, `curve`, `sound`, `binary_tree`, `repeat`,
-  `matrix` and `scrabble` (the modules with a conductor plugin that are small or most used; the rest are
-  waiting for generated descriptions, see modules#996),
-  written by hand from the modules' declarations (the names are those of each plugin's `exportedNames`).
-  The format has what they needed: opaque types (`Point`, `Sound`), function types (a curve is a function
-  from a number to a point; a wave, from a number to a number), `any` for a value that a function only
-  inspects (`is_tree`), and type parameters for a generic opaque type and its functions
-  (`BinaryTree[A]`, `entry[A]`). All of them go when the modules publish their own descriptions
-  (modules#996).
-* Numbers (decided with Martin, modules#996): the runtime turns a Python int into a JS number at the
-  boundary of a module, and a module's number comes back as a float; integers are not part of the module
-  interface. So `number` is `int | float` as a parameter (as the prelude's `math_*` are) and `float` as a
-  result, and a callback turns that around (it is given a float, and may return an int or a float).
-  `integer` marks a parameter that must be whole (`stackn`'s `n`, the `num_points` of the drawers of
-  `curve`): it is `int`, and is not allowed as a result.
-* Not yet: fetching a published description at run time (needs the format agreed in modules#996).
+  `matrix` and `scrabble`, written by hand from the modules' declarations (their names are those of each
+  plugin's exports). They go when the modules publish their own descriptions
+  ([modules#997](https://github.com/source-academy/modules/issues/997)).
+* Not yet: fetching a published description at run time (after the first descriptions are published).
 
 ### Phase 5: language directory, documentation, release (≈ 3 days)
 
