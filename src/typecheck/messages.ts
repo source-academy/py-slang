@@ -29,11 +29,12 @@ function widenLiterals(text: string): string {
 }
 
 /**
- * `Sequence[object]` is `list[object]`: it is what `is_list` finds in an object, declared as a Sequence
- * (covariant, so that narrowing a union with a list keeps the list), but a student knows lists.
+ * `Any` as the argument of a type is shown as `object`: the language has no `Any`, but the declarations of
+ * `is_pair` and `is_list` have one, because only `Any` lets the checker narrow a union (see the prelude).
+ * It is the type of what a student cannot know after `is_pair(x)` on an object, as in `LList[Any]`.
  */
-function showLists(text: string): string {
-  return text.replace(/\bSequence\[object\]/g, "list[object]");
+function showAny(text: string): string {
+  return text.replace(/(?<=[[,]\s?)Any\b/g, "object");
 }
 
 /** `H@head` is `H`: the type parameter of the function, which the student knows from the documentation. */
@@ -103,18 +104,6 @@ const REWRITES: { pattern: RegExp; message: (match: RegExpExecArray) => string }
     message: ([, type]) => `A condition must be a bool, but this is ${article(type)}`,
   },
   {
-    // x[0] = 5, after is_list(x) on an object
-    pattern: /^"__setitem__" method not defined on type "Sequence\[object\]"/,
-    message: () =>
-      "The elements of a list that is_list found in an object cannot be assigned: its type is not known. Declare the variable with a list type instead, as in x: list[int]",
-  },
-  {
-    // x.append(5), after is_list(x) on an object
-    pattern: /^Cannot access attribute "(.*)" for class "Sequence\[object\]"/,
-    message: ([, name]) =>
-      `${name} cannot be used on a list that is_list found in an object: its type is not known. Declare the variable with a list type instead, as in x: list[int]`,
-  },
-  {
     // pair(1, 2)[0]
     pattern: /^"__getitem__" method not defined on type "(Pair\[.*\])"/,
     message: ([, type]) => `A pair cannot be indexed (${type}): use head(...) and tail(...)`,
@@ -177,7 +166,7 @@ export function studentMessage(message: string): string {
       break;
     }
   }
-  text = showLists(text);
+  text = showAny(text);
   if (canBeNone)
     text += ". The value can be None: test for that first, for example with is_none(...)";
   return text;
