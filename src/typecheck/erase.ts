@@ -4,21 +4,24 @@ import { ASTNode, traverseAST } from "../validator";
 
 /**
  * The names that a function (or lambda) binds in its own scope: its parameters, and what its body
- * assigns, defines, imports or loops over (except what it declares `global`).
+ * assigns, defines, imports or loops over; and the names that it declares `global`.
  */
-function localNames(params: FunctionParam[], body: StmtNS.Stmt[]): Set<string> {
-  const names = new Set(params.map(param => param.lexeme));
+function scopeNames(
+  params: FunctionParam[],
+  body: StmtNS.Stmt[],
+): { locals: Set<string>; globals: Set<string> } {
+  const locals = new Set(params.map(param => param.lexeme));
   const globals = new Set<string>();
   const walk = (statements: StmtNS.Stmt[]) => {
     for (const stmt of statements) {
       if (stmt instanceof StmtNS.Assign) {
-        if (stmt.target instanceof ExprNS.Variable) names.add(stmt.target.name.lexeme);
-      } else if (stmt instanceof StmtNS.FunctionDef) names.add(stmt.name.lexeme);
+        if (stmt.target instanceof ExprNS.Variable) locals.add(stmt.target.name.lexeme);
+      } else if (stmt instanceof StmtNS.FunctionDef) locals.add(stmt.name.lexeme);
       else if (stmt instanceof StmtNS.FromImport)
-        for (const { name, alias } of stmt.names) names.add((alias ?? name).lexeme);
+        for (const { name, alias } of stmt.names) locals.add((alias ?? name).lexeme);
       else if (stmt instanceof StmtNS.Global) stmt.names.forEach(name => globals.add(name.lexeme));
       else if (stmt instanceof StmtNS.For) {
-        names.add(stmt.target.lexeme);
+        locals.add(stmt.target.lexeme);
         walk(stmt.body);
       } else if (stmt instanceof StmtNS.If) {
         walk(stmt.body);
@@ -27,30 +30,38 @@ function localNames(params: FunctionParam[], body: StmtNS.Stmt[]): Set<string> {
     }
   };
   walk(body);
-  globals.forEach(name => names.delete(name));
-  return names;
+  globals.forEach(name => locals.delete(name));
+  return { locals, globals };
 }
 
 /**
  * The uses of the `types` names that refer to a local binding of the function that they are in
  * (`def f(Rune: int): print(Rune)`), not to the type: the function's own scope hides the type's name.
+ * What a use refers to is decided by the innermost function around it that binds the name (then it is
+ * local) or declares it `global` (then it is the module's, the type).
  */
 function shadowedUses(program: ASTNode, types: ReadonlySet<string>): Set<ExprNS.Variable> {
-  const shadowed = new Set<ExprNS.Variable>();
-  const hide = (names: Set<string>, inside: ASTNode[]) => {
-    for (const name of names) {
-      if (!types.has(name)) continue;
-      for (const root of inside)
-        traverseAST(root, node => {
-          if (node instanceof ExprNS.Variable && node.name.lexeme === name) shadowed.add(node);
-        });
-    }
-  };
+  const functions: { names: ReturnType<typeof scopeNames>; inside: ASTNode[] }[] = [];
+  // The walk visits an outer function before the functions in it.
   traverseAST(program, node => {
     if (node instanceof StmtNS.FunctionDef || node instanceof ExprNS.MultiLambda)
-      hide(localNames(node.parameters, node.body), node.body);
-    else if (node instanceof ExprNS.Lambda) hide(localNames(node.parameters, []), [node.body]);
+      functions.push({ names: scopeNames(node.parameters, node.body), inside: node.body });
+    else if (node instanceof ExprNS.Lambda)
+      functions.push({ names: scopeNames(node.parameters, []), inside: [node.body] });
   });
+  const shadowed = new Set<ExprNS.Variable>();
+  for (const { names, inside } of functions) {
+    for (const name of types) {
+      const hides = names.locals.has(name);
+      if (!hides && !names.globals.has(name)) continue;
+      for (const root of inside)
+        traverseAST(root, node => {
+          if (!(node instanceof ExprNS.Variable) || node.name.lexeme !== name) return;
+          if (hides) shadowed.add(node);
+          else shadowed.delete(node);
+        });
+    }
+  }
   return shadowed;
 }
 

@@ -162,6 +162,21 @@ test("a local name hides the type's name inside a function, a lambda and a loop"
   expect((error as StaticTypeErrors).errors[0]).toMatchObject({ line: 3 });
 });
 
+test("a name that an inner function declares global is the module's, also if an outer function binds it", async () => {
+  const { session } = await setUp();
+  const error = await session
+    .runChunk(
+      "from rune import Rune\n" +
+        "def outer() -> None:\n    Rune = 1\n" +
+        "    def inner() -> None:\n        global Rune\n        print(Rune)\n" +
+        "    print(Rune)\n",
+    )
+    .catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(StaticTypeErrors);
+  // only the use in `inner` (line 6) is the type; the use in `outer` (line 7) is its local
+  expect((error as StaticTypeErrors).errors.map(e => e.line)).toEqual([6]);
+});
+
 describe("the names that a program imports only as types", () => {
   const erased = (source: string) =>
     eraseTypes(parse(source), { typeNames: () => new Set(["Rune"]) }).statements[0];
