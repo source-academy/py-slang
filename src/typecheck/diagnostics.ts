@@ -41,17 +41,22 @@ export function toTypeDiagnostic(diagnostic: LspDiagnostic, lineOffset = 0): Typ
 }
 
 const UNKNOWN = /^reportUnknown/;
+const NO_OVERLOAD = /^No overloads for "(tail|stream_tail)"/;
 
 /**
  * Leaves out what follows from another mistake. A mistake in an expression gives it an unknown type,
  * which the rules about unknown types report as well (`y = 1 + "a"` makes `y` unknown): on a line
- * with another error, those are not shown. The rest is in the order of the program.
+ * with another error, those are not shown. The same goes for "No overloads for tail match" (`tail`
+ * and `stream_tail` have an overload for lists and streams): the error about the argument that
+ * follows it says more. The rest is in the order of the program.
  */
 export function tidy(diagnostics: TypeDiagnostic[]): TypeDiagnostic[] {
-  const mistakes = new Set(
-    diagnostics.filter(d => d.severity === "error" && !UNKNOWN.test(d.rule ?? "")).map(d => d.line),
-  );
+  const errorLines = (keep: (d: TypeDiagnostic) => boolean) =>
+    new Set(diagnostics.filter(d => d.severity === "error" && keep(d)).map(d => d.line));
+  const mistakes = errorLines(d => !UNKNOWN.test(d.rule ?? ""));
+  const specific = errorLines(d => !UNKNOWN.test(d.rule ?? "") && !NO_OVERLOAD.test(d.original));
   return diagnostics
     .filter(d => !(UNKNOWN.test(d.rule ?? "") && mistakes.has(d.line)))
+    .filter(d => !(NO_OVERLOAD.test(d.original) && specific.has(d.line)))
     .sort((a, b) => a.line - b.line || a.column - b.column);
 }

@@ -163,4 +163,21 @@ describe("diagnostics", () => {
       [5, "reportUnknownVariableType"],
     ]);
   });
+
+  test("'No overloads' is left out when the error about the argument follows it, and kept alone", () => {
+    const both = tidy([
+      at(2, 1, "reportCallIssue", 'No overloads for "tail" match the provided arguments'),
+      at(
+        2,
+        1,
+        "reportArgumentType",
+        'Argument of type "Literal[5]" cannot be assigned to parameter "p"',
+      ),
+    ]);
+    expect(both.map((d: TypeDiagnostic) => d.rule)).toEqual(["reportArgumentType"]);
+    const alone = tidy([
+      at(2, 1, "reportCallIssue", 'No overloads for "tail" match the provided arguments'),
+    ]);
+    expect(alone.map((d: TypeDiagnostic) => d.rule)).toEqual(["reportCallIssue"]);
+  });
 });
