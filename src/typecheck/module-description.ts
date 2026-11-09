@@ -88,13 +88,20 @@ const turned = (direction: Direction): Direction => (direction === "in" ? "out" 
  * becomes a JS number, a module's number comes back as a float, and integers are not part of the module
  * interface. So `number` is `int | float` going in (as the prelude's `math_*` are), and `float` coming out;
  * `integer` marks a parameter that must be whole, and is `int` going in. It is not a result: a result
- * comes back as a float.
+ * comes back as a float. In an array, which is invariant, a number is `float` both ways: an array that a
+ * module returns can be passed back to it.
  */
-function pythonType(type: TypeDescription, scope: Scope, direction: Direction): string {
+function pythonType(
+  type: TypeDescription,
+  scope: Scope,
+  direction: Direction,
+  /** Inside an array, which is invariant: the element type is the same going in and coming out. */
+  exact = false,
+): string {
   if (typeof type === "string") {
     switch (type) {
       case "number":
-        return direction === "in" ? "int | float" : "float";
+        return direction === "in" && !exact ? "int | float" : "float";
       case "integer":
         if (direction === "out")
           throw new UnknownDescriptionError(
@@ -123,22 +130,22 @@ function pythonType(type: TypeDescription, scope: Scope, direction: Direction): 
       );
     return arity === 0
       ? type.opaque
-      : `${type.opaque}[${given.map(t => pythonType(t, scope, direction)).join(", ")}]`;
+      : `${type.opaque}[${given.map(t => pythonType(t, scope, direction, exact)).join(", ")}]`;
   }
   if ("parameter" in type) {
     if (!scope.parameters.has(type.parameter))
       throw new UnknownDescriptionError(`the type parameter ${type.parameter} is not declared`);
     return type.parameter;
   }
-  if ("list" in type) return `_LList[${pythonType(type.list, scope, direction)}]`;
+  if ("list" in type) return `_LList[${pythonType(type.list, scope, direction, exact)}]`;
   if ("pair" in type)
-    return `_Pair[${pythonType(type.pair[0], scope, direction)}, ${pythonType(type.pair[1], scope, direction)}]`;
-  if ("array" in type) return `list[${pythonType(type.array, scope, direction)}]`;
+    return `_Pair[${pythonType(type.pair[0], scope, direction, exact)}, ${pythonType(type.pair[1], scope, direction, exact)}]`;
+  if ("array" in type) return `list[${pythonType(type.array, scope, direction, true)}]`;
   if ("function" in type) {
     const params = type.function.params
-      .map(p => pythonType(p, scope, turned(direction)))
+      .map(p => pythonType(p, scope, turned(direction), exact))
       .join(", ");
-    return `_Callable[[${params}], ${pythonType(type.function.returns, scope, direction)}]`;
+    return `_Callable[[${params}], ${pythonType(type.function.returns, scope, direction, exact)}]`;
   }
   throw new UnknownDescriptionError(`the type ${JSON.stringify(type)}`);
 }

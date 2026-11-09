@@ -123,6 +123,23 @@ describe("the stub that a description becomes", () => {
     expect(stub).toContain("pi: float");
   });
 
+  test("an array has the same element type going in and coming out, as it is invariant", () => {
+    const stub = toStub({
+      version: 1,
+      module: "arrays",
+      opaqueTypes: [],
+      functions: [
+        {
+          name: "twice",
+          params: [{ name: "xs", type: { array: "number" } }],
+          returns: { array: "number" },
+        },
+      ],
+      constants: [],
+    });
+    expect(stub).toContain("def twice(xs: list[float], /) -> list[float]: ...");
+  });
+
   test("an integer is for a parameter: a result comes back as a float", () => {
     const base: ModuleDescription = {
       version: 1,
