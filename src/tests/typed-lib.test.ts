@@ -25,10 +25,10 @@ describe("the library documentation of Python §4 Typed", () => {
 
   test("starts each comment with the signature, under the parameter names of the documentation", () => {
     const linkedList = typed("linked_list");
-    expect(linkedList).toContain(" * <CODE>def head[H](p: Pair[H, Any]) -&gt; H</CODE>");
+    expect(linkedList).toContain(" * <CODE>def head[H, T](p: Pair[H, T]) -&gt; H</CODE>");
     expect(linkedList).toContain(" * <CODE>def pair[H, T](x: H, y: T) -&gt; Pair[H, T]</CODE>");
     // the documentation writes draw_data(...values); the declaration is (value1, *values)
-    expect(linkedList).toContain("def draw_data[A](value1: A, *values: Any) -&gt; A");
+    expect(linkedList).toContain("def draw_data[A](value1: A, *values: object) -&gt; A");
     expect(typed("math")).toContain(" * <CODE>math_pi: float</CODE>");
     expect(typed("stream")).toContain("def stream[A](*elements: A) -&gt; Stream[A]");
   });

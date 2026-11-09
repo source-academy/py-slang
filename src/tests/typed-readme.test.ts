@@ -17,7 +17,7 @@ describe("the types of the predeclared names in the documentation of Python §4 
       "streams",
       "math",
     ]);
-    expect(lines).toContain("def head[H](p: Pair[H, Any]) -> H");
+    expect(lines).toContain("def head[H, T](p: Pair[H, T]) -> H");
     expect(lines).toContain("def map[A, B](f: Callable[[A], B], xs: LList[A]) -> LList[B]");
     expect(lines).toContain("def is_none(x: object) -> TypeIs[None]");
     expect(lines).toContain("math_pi: float");
@@ -30,7 +30,7 @@ describe("the types of the predeclared names in the documentation of Python §4 
 
   test("have the HTML escaped", () => {
     const html = renderTypes(prelude);
-    expect(html).toContain("def head[H](p: Pair[H, Any]) -&gt; H");
+    expect(html).toContain("def head[H, T](p: Pair[H, T]) -&gt; H");
     expect(html).not.toMatch(/-> H/);
   });
 

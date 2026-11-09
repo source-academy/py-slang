@@ -43,7 +43,7 @@ describe("the typed listings of the library", () => {
     expect(text).toContain("def pair[H, T](x: H, y: T) -> Pair[H, T]:");
     expect(text).toContain("def llist[A](*values: A) -> LList[A]:");
     // a type that a program cannot write is a type parameter of its own, or bool
-    expect(text).toContain("def head[H, X1](p: Pair[H, X1]) -> H:");
+    expect(text).toContain("def head[H, T](p: Pair[H, T]) -> H:");
     expect(text).toContain("def is_pair(x: object) -> bool:");
     expect(text).not.toMatch(/\bAny\b|TypeIs/);
     // the helpers, which the checker does not predeclare
@@ -92,7 +92,7 @@ describe("the appendix of the types of the predeclared names", () => {
   test("lists the declarations of the checker, in listings", () => {
     const tex = typesAppendix(prelude);
     expect(tex).toContain("\\subsection*{pairs and linked lists}");
-    expect(tex).toContain("def head[H](p: Pair[H, Any]) -> H");
+    expect(tex).toContain("def head[H, T](p: Pair[H, T]) -> H");
     expect(tex).toContain("math_pi: float");
   });
 });

@@ -99,7 +99,7 @@ describe("the Python §4 Typed evaluator", () => {
     expect(outputs).toEqual([]);
     expect(errors.map(e => [e.line, e.message.split(".")[0]])).toEqual([
       [3, "f expects n to be int, but got str"],
-      [5, "head expects p to be Pair[H, Any], but got LList[int]"],
+      [5, "head expects p to be Pair[H, T], but got LList[int]"],
       [6, "A condition must be a bool, but this is an int"],
     ]);
   });
