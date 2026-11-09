@@ -74,8 +74,8 @@ describe("the typed listings of the library", () => {
         // These two assume that the stream has enough elements, as the specification says: the stream
         // can be None.
         .filter(block => !/^def (stream_ref|eval_stream)[[(]/.test(block))
-        // is_stream tests an object with is_pair, which narrows it to Pair[Any, Any], and then uses
-        // its tail as a function: with the overload of tail for lists, that tail is LList[Any] (#652).
+        // is_stream tests an object with is_pair, which narrows it to Pair[object, object], and then
+        // uses its tail as a function: that tail is an object, and the checker rejects arity(tail(xs)).
         .filter(block => !/^def is_stream[[(]/.test(block))
         .join("");
 

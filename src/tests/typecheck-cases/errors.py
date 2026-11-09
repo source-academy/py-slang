@@ -32,6 +32,11 @@ def second(ys: LList[int]) -> int:
     return 1 if is_none(ys) else 2 if is_none(tail(ys)) else head(tail(ys))  # ERROR: head expects p to be Pair[H, T], but got LList[int]
 tail(5)                                            # ERROR: tail expects p to be Pair[H, T], but got int
 def after_is_pair(x: object) -> int:
-    return arity(tail(x)) if is_pair(x) else 0     # ERROR: arity expects f to be (...) -> object, but got LList[Any]
+    return arity(tail(x)) if is_pair(x) else 0     # ERROR: arity expects f to be (...) -> object, but got object
 def annotated(x: Pair[int, Callable[[], int]]) -> int:
     return arity(tail(x))
+def head_of_object(x: object) -> str:
+    y: str = head(x) if is_pair(x) else ""         # ERROR: Type "object | str" is not assignable to declared type "str"
+    return y
+def narrowed_pair(xs: LList[int]) -> int:
+    return head(xs) if is_pair(xs) else 0
