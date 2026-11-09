@@ -372,42 +372,55 @@ the module is loaded at run time and the checker sees only the text. Today such 
 The decision: **modules are language-agnostic, so their types are described once, in a language-neutral
 form, and each typed language maps that description to its own types.** The alternative, a stub file
 for each module in each typed language, grows with modules × languages and drifts from the modules.
-The design question is open in [source-academy/modules#996](https://github.com/source-academy/modules/issues/996).
+The design was discussed in [source-academy/modules#996](https://github.com/source-academy/modules/issues/996),
+and is **settled**; the work in the `modules` repository is [#997](https://github.com/source-academy/modules/issues/997).
 
-* **The description** (in the `modules` repository, published with each version of a module, next to
-  its manifest): for each export, its name and type, in the conductor's `DataType` vocabulary
-  (`void`, `boolean`, `number`, `integer`, `string`, `pair`, `list`, `array`, `closure`, `opaque`)
-  extended with what the vocabulary lacks: named opaque types (a rune is not a curve), function types
-  (so that a callback is described), and the element types of lists, pairs and arrays. A conductor
-  module already declares a `{ args, returnType }` signature for each method
-  (`attachModuleMethod`), so a description can be generated from those and made more precise by
-  hand; a consumer cannot read these signatures today.
+* **The description**: for each export, its name and type. It is a *superset* of what the conductor knows:
+  the conductor's `DataType` is not changed (that is the one change that could make an old host and a new
+  module disagree), and the description adds what the vocabulary lacks: named opaque types (a rune is not a
+  curve), function types (so that a callback is described), the types of the elements of lists, pairs and
+  arrays, type parameters (`BinaryTree[A]`), and `any` for a value that a function only inspects.
+  * **Defined in `modules`**, in `modules-lib`, as a JSON-serializable TypeScript type plus a schema, and
+    published with each version of a bundle (`description.json`, next to `index.js` and `docs.json`), so
+    that it is the description of the version that a program loads. It has a format `version`: a consumer
+    rejects one that it does not know, with a clear message.
+  * **Generated first, hand-added where it matters**: names, arities and what is known from
+    `exportedNames`, the `attachModuleMethod` signatures and the TypeScript declarations are generated; the
+    names of the opaque types, the types of callbacks and type parameters are written by hand (the
+    conductor says `CLOSURE` and `OPAQUE`, nothing more). The build checks a description against the
+    plugin, including the names that a plugin exports when it is loaded (`rune`'s shapes, `scrabble`'s
+    arrays), so it is checked against `exports` after `initialise()`, not `exportedNames`.
 * **The mapper** (py-slang, `src/typecheck/`): turns a description into the text of a Python stub:
-  an opaque type is a class, a function type is `Callable`, a list is `LList[T]`, a pair is
-  `Pair[A, B]`, an array is `list[T]`, `number` is `float` and `integer` is `int` (an `int` is
-  accepted where a `float` is wanted). The stub is a file of the checker's file system, for each
-  module that a program imports (`checker.ts` already has files for the chunks of a session).
+  an opaque type is a class that no program can construct, a function type is `Callable`, a list is
+  `LList[T]`, a pair is `Pair[A, B]`, an array is `list[T]`. The stub is a file of the checker's file system
+  (`foo/bar.pyi` for `from foo.bar import x`), for each module that a program imports. A description that is
+  of another module, of an unknown version or kind, or whose stub does not check, is reported, and the
+  program is not checked against it.
+* **Numbers mirror the runtime.** At run time a Python int becomes a JS number at the boundary of a module,
+  a module's number comes back as a float, and integers are not part of the module interface. So `number`
+  is `int | float` as a parameter (as the prelude's `math_*` are, so that messages say what is accepted)
+  and `float` as a result; a function type turns that around (a callback is given a float, and may return an
+  int or a float); in an array, which is invariant, a number is `float` both ways. `integer` marks a
+  parameter that must be whole (`stackn`'s `n`, the `num_points` of the drawers of `curve`): it is `int`, and
+  is not allowed as a result.
 * **Loading**: before a chunk is checked, the evaluator fetches the description of each module that it
-  imports, as it fetches the module, and gives the stubs to the checker. A module with no description
-  is an error (there is no `Any` to give its names a type).
-* **Until descriptions exist**: a few hand-written stubs for the most used modules (`rune`, `curve`,
-  `sound`, `binary_tree`), in py-slang and marked as temporary, removed as the descriptions arrive.
+  imports, as it fetches the module, and gives the stubs to the checker.
+* **A module with no description cannot be imported** from a typed language (there is no `Any` to give its
+  names a type): the error says that its types are not known.
+* **Until the modules publish descriptions**: temporary hand-written descriptions in py-slang for the
+  modules that are most used or tiny: `rune`, `curve`, `sound`, `binary_tree`, `repeat`, `matrix` and
+  `scrabble`. The others that have a conductor plugin (`plotly`, `repl`, `midi`, `csg`, `pix_n_flix`,
+  `robot_simulation`) wait for the generated descriptions; no more stubs are written by hand in py-slang.
+  The temporary ones are removed as the modules publish their own.
 * **Backward compatible**: nothing changes for existing languages and bundles.
   * A description is a new, optional file next to `index.js` and `docs.json`; the build tools of the
     `modules` repository read manifests by key and reject no extra field or file.
   * `attachModuleMethod(Class, name, args, returnType)` keeps working; richer type information is kept
     apart from `method.signature`, which the runner and host read (`closure_arity`, `closure_is_vararg`).
-  * `DataType` is not extended in the first version: that is the one change that could make an old host
-    and a new module disagree.
-  * A description has a `version`; the mapper rejects an unknown version or kind with a clear message.
-  * A module without a description cannot be imported from a typed language, and nothing else changes.
+  * A module without a description just cannot be imported from a typed language.
 * **A second source**: a bundle's `dist/docs.json` is TypeDoc JSON with the full TypeScript signatures,
-  including the shapes that a module exports dynamically (`rune`'s `heart`). It describes the TypeScript
-  API, not the conductor-level surface that Python sees, so it is compared with the hand-written
-  description on `rune` before it is relied on.
-* **Open**, and for the issue above: the format and who defines it (the modules or the conductor);
-  whether `DataType` itself gets the new distinctions (later, with a version); and how much can be
-  generated (from `attachModuleMethod` calls, or from `docs.json`).
+  including the shapes that a module exports dynamically. It describes the TypeScript API, not the
+  conductor-level surface that Python sees, so it can feed the generator but is not relied on alone.
 
 **Done so far (first part of phase 4):**
 
@@ -454,6 +467,12 @@ The design question is open in [source-academy/modules#996](https://github.com/s
   the frontend's chapter/variant handling for Python before release.
 * Release: py-slang minor version, then language-directory, then a frontend bump of the directory
   through its lockfile (no floating versions).
+  * The order: py-slang merged **and deployed** (the evaluators and `TypedPy4Checker.js` are fetched from
+    GitHub Pages), then the language-directory change (merge, bump `package.json`, tag), then the frontend.
+  * The welcome text says what a student can do **today**: which modules can be imported (those with a
+    description) and that others cannot yet; it says that the types are checked using
+    [Pyright](https://github.com/microsoft/pyright). It is changed with each module that gets a description.
+  * The language is called "Python §4 Typed" everywhere that a student sees it.
 
 ### Later (not in this project)
 
