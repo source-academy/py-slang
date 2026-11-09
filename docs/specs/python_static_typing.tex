@@ -182,7 +182,10 @@ parameters.
   \end{tabular}
 \end{center}
 
-The types of all predeclared functions are listed in the documentation of Python \S 4 Typed.
+The types of the predeclared functions are listed in the documentation of Python \S 4 Typed, except
+those of \texttt{print}, \texttt{len}, \texttt{abs}, \texttt{max}, \texttt{min}, \texttt{round},
+\texttt{input}, \texttt{repr}, \texttt{str} and \texttt{complex}, which have the types that Python's
+standard library gives them (with the difference that \texttt{bool} is not a number).
 The types of \texttt{tokenize}, \texttt{parse} and \texttt{apply\_in\_underlying\_python}, and
 of the data that \texttt{parse} returns, are not yet fixed: they will be given as opaque
 syntax types with typed accessor functions

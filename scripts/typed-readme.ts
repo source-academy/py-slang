@@ -6,8 +6,11 @@
  *     tsx scripts/typed-readme.ts <template> <prelude.pyi> <output>
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { signaturesOf, type ModuleDescription } from "../src/typecheck/module-description";
+import { temporaryModuleDescriptions } from "../src/typecheck/modules";
 
 const MARKER = "<!-- PRELUDE -->";
+const MODULES_MARKER = "<!-- MODULES -->";
 
 const escapeHtml = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -48,9 +51,50 @@ export function renderTypes(prelude: string): string {
     .join("\n");
 }
 
+/** What the documentation has for a module, besides what its description says (docs/md/module-types.json). */
+export interface ModuleDocs {
+  note?: string;
+  types?: Record<string, string>;
+}
+
+/** The types and the names of the modules whose types are known: `docs` has the explanations of the types. */
+export function renderModules(
+  descriptions: ModuleDescription[],
+  docs: Record<string, ModuleDocs>,
+): string {
+  return descriptions
+    .map(description => {
+      const { types, lines } = signaturesOf(description);
+      const doc = docs[description.module] ?? {};
+      const typeItems = types.map(({ name, typeParameters }) => {
+        const shown = typeParameters.length ? `${name}[${typeParameters.join(", ")}]` : name;
+        return `<li><code>${escapeHtml(shown)}</code>: ${escapeHtml(doc.types?.[name] ?? "")}</li>`;
+      });
+      return [
+        `<h3>${escapeHtml(description.module)}</h3>`,
+        doc.note ? `<p>${escapeHtml(doc.note)}</p>` : "",
+        typeItems.length ? `<p>Types:</p>\n<ul>\n${typeItems.join("\n")}\n</ul>` : "",
+        `<pre><code>${lines.map(escapeHtml).join("\n")}</code></pre>`,
+      ]
+        .filter(part => part !== "")
+        .join("\n");
+    })
+    .join("\n");
+}
+
 if (require.main === module) {
   const [template, prelude, output] = process.argv.slice(2);
   const text = readFileSync(template, "utf8");
   if (!text.includes(MARKER)) throw new Error(`${template} has no ${MARKER}`);
-  writeFileSync(output, text.replace(MARKER, renderTypes(readFileSync(prelude, "utf8"))));
+  if (!text.includes(MODULES_MARKER)) throw new Error(`${template} has no ${MODULES_MARKER}`);
+  const docs = JSON.parse(readFileSync("docs/md/module-types.json", "utf8")) as Record<
+    string,
+    ModuleDocs
+  >;
+  writeFileSync(
+    output,
+    text
+      .replace(MARKER, renderTypes(readFileSync(prelude, "utf8")))
+      .replace(MODULES_MARKER, renderModules(temporaryModuleDescriptions(), docs)),
+  );
 }

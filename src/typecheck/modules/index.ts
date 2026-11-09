@@ -22,3 +22,9 @@ const TEMPORARY: Record<string, ModuleDescription> = {
 };
 
 export const temporaryDescriptions: DescriptionSource = module => TEMPORARY[module];
+
+/** TEMPORARY: all of them, by the name of the module (the documentation lists what can be imported). */
+export const temporaryModuleDescriptions = (): ModuleDescription[] =>
+  Object.keys(TEMPORARY)
+    .sort()
+    .map(name => TEMPORARY[name]);

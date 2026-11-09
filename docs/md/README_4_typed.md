@@ -33,8 +33,11 @@ name to see how it is defined and used. They come in these groups:
     </li>
   </ul>
 
-The <a href="#types-of-the-predeclared-names">types of all predeclared names</a> are listed below.
-The types of `tokenize`, `parse` and `apply_in_underlying_python` are not fixed yet.
+The <a href="#types-of-the-predeclared-names">types of the predeclared names</a> are listed below, except
+for `print`, `len`, `abs`, `max`, `min`, `round`, `input`, `repr`, `str` and `complex`, which have the types
+that <a href="https://docs.python.org/3/library/functions.html">Python's standard library</a> gives them
+(`bool` is not a number, as above). The types of `tokenize`, `parse` and `apply_in_underlying_python` are
+not fixed yet.
 
 ## What can you do in Python §4 Typed?
 
@@ -133,10 +136,18 @@ back is a `float`. A function of a module that works for any type (`repeat`, and
 `float`: a program that uses it where an `int` is required, as the index of a list, passes the check and
 fails when it runs.
 
+## Types of the modules
+
+The types that each module defines, and the names that it has, with their types. `int | float` for a
+number that you give to a module, and `float` for a number that it gives back, as described above.
+
+<!-- MODULES -->
+
 ## Types of the predeclared names
 
 `Any` in a declaration means that any type is accepted there (you cannot write `Any` in a program),
-`TypeIs[T]` means `bool`, and in addition narrows the type of the argument to `T`, and the `/` means
+`TypeIs[T]` means `bool`, and in addition narrows the type of the argument to `T`, `NoReturn` is the result
+of a function that never returns (`error`; you cannot write it in a program either), and the `/` means
 that the arguments are passed by position.
 
 <!-- PRELUDE -->
