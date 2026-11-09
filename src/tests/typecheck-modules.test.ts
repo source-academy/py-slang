@@ -204,6 +204,26 @@ describe("descriptions that make a stub that does not check", () => {
   );
 
   test(
+    "the description of another module is not used for the module that was asked for",
+    async () => {
+      const checker = await withSource({
+        version: 1,
+        module: "bar",
+        opaqueTypes: [],
+        functions: [{ name: "f", params: [], returns: "void" }],
+        constants: [],
+      });
+      try {
+        const found = errors(await checker.check("from foo import f\nf()\n"));
+        expect(found[0].message).toMatch(/cannot be used.*describes the module bar, not foo/);
+      } finally {
+        checker.dispose();
+      }
+    },
+    CHECKER_SETUP_TIMEOUT_MS,
+  );
+
+  test(
     "a module with a dotted name is found where a program imports it",
     async () => {
       const checker = await withSource({

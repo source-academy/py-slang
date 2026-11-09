@@ -131,6 +131,11 @@ export class TypedPythonChecker {
       if (!description) continue;
       try {
         // `foo.bar` is the file foo/bar.pyi, where pyright looks for it.
+        // The source gave the description of another module (stale, or misrouted).
+        if (description.module !== module)
+          throw new UnknownDescriptionError(
+            `it describes the module ${description.module}, not ${module}`,
+          );
         const stub = toStub(description);
         const found = await this.client.check(`${module.replace(/\./g, "/")}.pyi`, stub);
         // A description can make a stub that does not check (an opaque type with the name of a
