@@ -119,6 +119,31 @@ function writable(types: string[], taken: string[]): { types: string[]; added: s
 }
 
 /**
+ * `name[A, B](f: ..., xs: ...) -> R`: the declaration with the parameter names of a listing (`names`, in order;
+ * a `*` in front of a star parameter). What a program cannot write is made writable (see `writable`).
+ * `shown` is the name to show (`build` for the key `build_stream.build`).
+ */
+export function renderSignature(
+  key: string,
+  names: string[],
+  declaration: Declaration,
+  shown: string = key,
+): string {
+  if (names.length !== declaration.parameters.length)
+    throw new Error(
+      `${key} has ${names.length} parameters in the listing and ${declaration.parameters.length} in its declaration`,
+    );
+  const { types, added } = writable(
+    [...declaration.parameters.map(p => p.type), declaration.returns],
+    declaration.typeParameters,
+  );
+  const parameters = names.map((parameter, i) => `${parameter}: ${types[i]}`);
+  const typeParameters = [...declaration.typeParameters, ...added];
+  const generic = typeParameters.length ? `[${typeParameters.join(", ")}]` : "";
+  return `${shown}${generic}(${parameters.join(", ")}) -> ${types[types.length - 1]}`;
+}
+
+/**
  * The text of a listing with the types of its functions: every line `def name(x, y):` is given the types of
  * the declaration of `name`. A function without a declaration is an error.
  */
@@ -137,19 +162,7 @@ export function typedListing(source: string, declarations: Map<string, Declarati
       const declaration = declarations.get(key);
       if (!declaration)
         throw new Error(`no declaration of ${key}: add it to prelude.pyi or helper-types.txt`);
-      const names = splitTopLevel(parameterNames);
-      if (names.length !== declaration.parameters.length)
-        throw new Error(
-          `${key} has ${names.length} parameters in the listing and ${declaration.parameters.length} in its declaration`,
-        );
-      const { types, added } = writable(
-        [...declaration.parameters.map(p => p.type), declaration.returns],
-        declaration.typeParameters,
-      );
-      const parameters = names.map((parameter, i) => `${parameter}: ${types[i]}`);
-      const typeParameters = [...declaration.typeParameters, ...added];
-      const generic = typeParameters.length ? `[${typeParameters.join(", ")}]` : "";
-      return `${indent}def ${name}${generic}(${parameters.join(", ")}) -> ${types[types.length - 1]}:`;
+      return `${indent}def ${renderSignature(key, splitTopLevel(parameterNames), declaration, name)}:`;
     })
     .join("\n");
 }
@@ -163,7 +176,7 @@ export function typesAppendix(prelude: string): string {
     "The predeclared names have the following types. \\lstinline{Any} means that any type is accepted there",
     "(a program cannot write \\lstinline{Any}); \\lstinline{TypeIs[T]} means \\lstinline{bool}, and in addition",
     "narrows the type of the argument to \\lstinline{T}; \\lstinline{NoReturn} is the result of a function",
-    "that never returns; the \\lstinline{/} means that the arguments are passed by position.",
+    "that never returns.",
     "The names \\lstinline{print}, \\lstinline{len}, \\lstinline{abs}, \\lstinline{max}, \\lstinline{min},",
     "\\lstinline{round}, \\lstinline{input}, \\lstinline{repr}, \\lstinline{str} and \\lstinline{complex} have the",
     "types that Python's standard library gives them (but \\lstinline{bool} is not a number).",

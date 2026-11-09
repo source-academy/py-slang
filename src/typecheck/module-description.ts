@@ -255,7 +255,7 @@ export function opaqueTypeNames(description: ModuleDescription): ReadonlySet<str
 export interface ModuleSignatures {
   /** The types that the module defines, with their type parameters. */
   types: { name: string; typeParameters: string[] }[];
-  /** `def beside(rune1: Rune, rune2: Rune, /) -> Rune` and `heart: Rune`, in the order of the description. */
+  /** `def beside(rune1: Rune, rune2: Rune) -> Rune` and `heart: Rune`, in the order of the description. */
   lines: string[];
 }
 
@@ -275,7 +275,6 @@ export function signaturesOf(description: ModuleDescription): ModuleSignatures {
   for (const { name, params, returns, typeParameters = [] } of description.functions) {
     const scope = { opaque, parameters: new Set(typeParameters) };
     const parameters = params.map(p => `${p.name}: ${pythonType(p.type, scope, "in")}`);
-    if (parameters.length > 0) parameters.push("/");
     const generic = typeParameters.length ? `[${typeParameters.join(", ")}]` : "";
     lines.push(
       show(

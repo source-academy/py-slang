@@ -147,9 +147,8 @@ number that you give to a module, and `float` for a number that it gives back, a
 ## Types of the predeclared names
 
 `Any` in a declaration means that any type is accepted there (you cannot write `Any` in a program),
-`TypeIs[T]` means `bool`, and in addition narrows the type of the argument to `T`, `NoReturn` is the result
-of a function that never returns (`error`; you cannot write it in a program either), and the `/` means
-that the arguments are passed by position.
+`TypeIs[T]` means `bool`, and in addition narrows the type of the argument to `T`, and `NoReturn` is the result
+of a function that never returns (`error`; you cannot write it in a program either).
 
 <!-- PRELUDE -->
 
