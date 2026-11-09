@@ -1,0 +1,67 @@
+\input python_header
+
+\begin{document}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\docheader{2026}{Python}{\S 4 Typed}{Martin Henz, Boyd Anderson}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\input python_intro
+
+\section{Changes}
+
+Python \S 4 Typed is Python \S 4 with type annotations, which are checked before the
+program runs. Compared to Python \S 4, Python \S 4 Typed has the following changes:
+\begin{itemize}
+  \item Function definitions annotate the types of their parameters and their return type,
+    and assignments can declare the type of a name.
+  \item Function definitions can have type parameters, and the new \lstinline{type}
+    statement defines type aliases.
+  \item Programs are checked for type errors before they run, as described in Section
+    ``Static Type Checking'' below. A program with a type error does not run.
+\end{itemize}
+A Python \S 4 Typed program without its annotations, type parameters and \lstinline{type}
+statements is a Python \S 4 program, and it behaves in the same way.
+\input python_4_typed_bnf
+
+\newpage
+
+\input python_indentation
+\input python_precedence_3
+\input python_restrictions_3
+
+
+\input python_loops
+
+\input python_names_lang
+\input python_numbers
+
+\input python_strings
+
+\input python_static_typing
+
+\input python_typing_front
+\input python_typing_middle_34
+\input python_typing_back
+\input python_typing_tail_34
+
+\input python_standard
+
+\input python_typed_pointer
+
+\input python_misc
+
+\input python_math
+
+\input python_linked_list_library_typed
+
+\input python_pair_mutators
+
+\input python_stream_library_typed
+
+\input python_interpreter
+
+\input generated/python_typed_names
+
+\input python_py_differences
+
+\end{document}

@@ -213,6 +213,7 @@ import_as_name ->
 statement ->
     statementAssign %newline                     {% id %}
   | statementAnnAssign %newline                  {% id %}
+  | statementTypeAlias %newline                  {% id %}
   | statementSubscriptAssign %newline            {% id %}
   | statementTupleAssign %newline                {% id %}
   | statementRaise %newline                      {% id %}
@@ -381,10 +382,17 @@ statementDecorated -> decorator:+ (statementDef | statementClass)
        new StmtNS.Decorated(decorators[0].startToken, definition.endToken, decorators, definition) %}
 decorator -> "@" expression %newline  {% ([, e]: [moo.Token, ExprNS.Expr, moo.Token]) => e %}
 
-statementDef -> "def" %name params ":" block
-  {% ([kw, name, params,, body]: [moo.Token, moo.Token, FunctionParam[], moo.Token, StmtNS.Stmt[]]) =>
-       new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
-         toAstToken(name), params, body, []) %}
+# `def f[A](x: T, ...) -> R:` The annotations, the return annotation and the type parameters are
+# only allowed by the typed sublanguages (the other sublanguages reject them).
+statementDef ->
+    "def" %name type_params:? def_params ":" block
+      {% ([kw, name, tps, params,, body]: [moo.Token, moo.Token, Token[] | null, FunctionParam[], moo.Token, StmtNS.Stmt[]]) =>
+           new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
+             toAstToken(name), params, body, [], null, (tps ?? [])) %}
+  | "def" %name type_params:? def_params "->" expression ":" block
+      {% ([kw, name, tps, params,, returns,, body]: [moo.Token, moo.Token, Token[] | null, FunctionParam[], moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) =>
+           new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
+             toAstToken(name), params, body, [], returns, (tps ?? [])) %}
 
 # ============================================================================
 # if-statement with EBNF                         [python_1_bnf.tex lines 31-33]
@@ -401,6 +409,18 @@ if_statement -> "if" expression ":" block ("elif" expression ":" block):* ("else
        const endTok = (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken;
        return new StmtNS.If(toAstToken(kw), endTok, test, body, else_);
      } %}
+
+# `type Name[A, B] = value` (PEP 695). `type` is a soft keyword, as in Python: otherwise an ordinary
+# name, so `type = 1` is an assignment. Only a name followed by another name can start a type alias.
+statementTypeAlias -> %name %name type_params:? "=" expression
+  {% ([kw, name, tps,, value]: [moo.Token, moo.Token, Token[] | null, moo.Token, ExprNS.Expr], _location: number, reject: object) =>
+       kw.value === "type"
+         ? new StmtNS.TypeAlias(toAstToken(kw), value.endToken, toAstToken(name), (tps ?? []), value)
+         : reject %}
+
+# The type parameters of a `def` or a `type`: `[A, B]`.
+type_params -> "[" names (%comma):? "]"
+  {% ([, ns]: [moo.Token, Token[], moo.Token | null, moo.Token]) => ns %}
 
 # ============================================================================
 # names ::= ...                                  [python_1_bnf.tex line 30]
@@ -421,6 +441,7 @@ block ->
 blockInline ->
     statementAssign       {% id %}
   | statementAnnAssign    {% id %}
+  | statementTypeAlias    {% id %}
   | statementSubscriptAssign {% id %}
   | statementTupleAssign  {% id %}
   | statementRaise        {% id %}
@@ -470,9 +491,39 @@ param ->
   | "*" %name
       {% ([, t]: [moo.Token, moo.Token]) => toFunctionParam(t, true) %}
 
-params ->
+# The parameters of a `def`: as the parameters of a lambda, but each may have an annotation (`x: int`,
+# `*xs: int`). A lambda's parameters cannot, because the colon after them starts its body.
+def_params ->
     "(" ")"                                   {% drop %}
-  | "(" rest_names ")"                        {% ([, ps]: [moo.Token, FunctionParam[], moo.Token]) => checkParameters(ps) %}
+  | "(" def_rest_names ")"                    {% ([, ps]: [moo.Token, FunctionParam[], moo.Token]) => checkParameters(ps) %}
+
+def_rest_names ->
+    def_plain_params (%comma):?
+      {% ([ps, comma]: [FunctionParam[], moo.Token | null]) => withTrailingComma(ps, comma) %}
+  | def_plain_params "," def_kw_param (%comma):?
+      {% ([ps,, kw, comma]: [FunctionParam[], moo.Token, FunctionParam, moo.Token | null]) => withTrailingComma([...ps, kw], comma) %}
+  | def_kw_param (%comma):?
+      {% ([kw, comma]: [FunctionParam, moo.Token | null]) => withTrailingComma([kw], comma) %}
+def_plain_params ->
+    def_param
+      {% ([p]: [FunctionParam]) => [p] %}
+  | def_plain_params "," def_param
+      {% ([params,, p]: [FunctionParam[], moo.Token, FunctionParam]) => [...params, p] %}
+def_kw_param ->
+    "**" %name
+      {% ([, t]: [moo.Token, moo.Token]) => toFunctionParam(t, false, undefined, true) %}
+  | "**" %name ":" expression
+      {% ([, t,, ann]: [moo.Token, moo.Token, moo.Token, ExprNS.Expr]) => toFunctionParam(t, false, undefined, true, ann) %}
+
+def_param ->
+    param
+      {% id %}
+  | %name ":" expression
+      {% ([t,, ann]: [moo.Token, moo.Token, ExprNS.Expr]) => toFunctionParam(t, false, undefined, false, ann) %}
+  | %name ":" expression "=" expression
+      {% ([t,, ann,, d]: [moo.Token, moo.Token, ExprNS.Expr, moo.Token, ExprNS.Expr]) => toFunctionParam(t, false, d, false, ann) %}
+  | "*" %name ":" expression
+      {% ([, t,, ann]: [moo.Token, moo.Token, moo.Token, ExprNS.Expr]) => toFunctionParam(t, true, undefined, false, ann) %}
 
 # ============================================================================
 # expression ::= ...                             [python_1_bnf.tex lines 35-46]
@@ -767,6 +818,15 @@ comp_target ->
 subscript_index ->
     expression  {% id %}
   | slice_expr  {% id %}
+  # `x[a, b]` and `x[a,]`: the index is a tuple, as in Python. (It is what `Callable[[int], int]`
+  # and `Pair[int, int]` need in an annotation; the sublanguages reject tuples in a program.)
+  | expression ("," expression):+ (%comma):?
+      {% ([first, rest, comma]: [ExprNS.Expr, [moo.Token, ExprNS.Expr][], moo.Token | null]) => {
+           const elements = [first, ...rest.map(d => d[1])];
+           return new ExprNS.Tuple(first.startToken, comma ? toAstToken(comma) : elements[elements.length - 1].endToken, elements);
+         } %}
+  | expression %comma
+      {% ([first, comma]: [ExprNS.Expr, moo.Token]) => new ExprNS.Tuple(first.startToken, toAstToken(comma), [first]) %}
 slice_expr ->
     expression:? ":" expression:? (":" expression:?):?
       {% ([lower, colon, upper, rest]: [ExprNS.Expr | null, moo.Token, ExprNS.Expr | null, [moo.Token, ExprNS.Expr | null] | null]) => {

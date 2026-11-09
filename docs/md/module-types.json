@@ -1,0 +1,37 @@
+{
+  "binary_tree": {
+    "types": {
+      "BinaryTree": "a binary tree whose entries have type A, made with make_tree and make_empty_tree"
+    }
+  },
+  "curve": {
+    "note": "A curve is a function from a number between 0 and 1 to a Point: Callable[[float], Point]. A transformation of curves is a function from a curve to a curve. The 2D drawers (draw_connected, ...) and the 3D drawers (draw_3D_connected, ...) are different types: animate_curve takes a 2D drawer and animate_3D_curve a 3D drawer.",
+    "types": {
+      "Point": "a point of a curve, with an x and a y, and a z and a colour in 3D",
+      "CurveDrawn": "a curve that was drawn with a 2D drawer",
+      "Curve3DDrawn": "a curve that was drawn with a 3D drawer",
+      "CurveAnimation": "an animation of curves"
+    }
+  },
+  "matrix": {
+    "note": "get_matrix gives the rows of the tone matrix as a linked list, the bottom row first; each row is a linked list of booleans."
+  },
+  "repeat": {
+    "note": "The function that is repeated has the same type for its parameter and its result. The count n must be a whole number."
+  },
+  "rune": {
+    "types": {
+      "Rune": "a picture that you can combine and transform",
+      "AnimatedRune": "an animation of runes, which animate_rune and animate_anaglyph give (no function of rune takes one)"
+    }
+  },
+  "scrabble": {
+    "note": "scrabble_words is an array of the words; scrabble_letters has, for each word, the array of its letters. The tiny versions have far fewer words."
+  },
+  "sound": {
+    "note": "A wave is a function from a time in seconds to an amplitude between -1 and 1: Callable[[float], float]. A transformation of sounds is a function from a sound to a sound. record gives a function that stops the recording and gives a function that gives the sound; record_for gives a function that gives the sound.",
+    "types": {
+      "Sound": "a sound, which you can play and combine; make_sound makes one from a wave and a duration, and get_wave and get_duration take it apart"
+    }
+  }
+}

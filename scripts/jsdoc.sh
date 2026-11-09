@@ -35,6 +35,9 @@ check_git_root() {
 run_jsdoc() {
   local name=$1
   local readme=$2
+  # a path of its own, if it is absolute (a generated page); else a file of docs/md
+  local readme_path="$MD/$readme"
+  if [[ "$readme" == /* ]]; then readme_path="$readme"; fi
   local dst_subfolder=$3
   shift 3
   local libs=$@
@@ -42,7 +45,7 @@ run_jsdoc() {
   echo "Building $name..."
   $JSDOC -r -t "$TMPL" \
          -c docs/jsdoc/conf.json \
-         -R "$MD/$readme" \
+         -R "$readme_path" \
          -d "$DST/$dst_subfolder" \
          $libs
   echo "Finished $name."
@@ -89,6 +92,24 @@ run() {
 
   # Python §4
   run_jsdoc "Python §4" "README_4.md" "python_4" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" "$LIB/pairmutator.js" "$LIB/list.js" "$LIB/stream.js" "$LIB/mce.js" &
+
+  # Python §4 Typed: the documentation of the predeclared names with their types, which come from the
+  # declarations that the type checker uses (src/typecheck/prelude.pyi): the library sources with the types
+  # (scripts/typed-lib.ts), and a front page with the types of all names (scripts/typed-readme.ts)
+  local typed_dir typed_readme typed_lib
+  typed_dir="$(mktemp -d)"
+  typed_readme="$typed_dir/README_4_typed.md"
+  typed_lib="$typed_dir/lib"
+  yarn tsx scripts/typed-lib.ts "$typed_lib"
+  yarn tsx scripts/typed-readme.ts "$MD/README_4_typed.md" src/typecheck/prelude.pyi "$typed_readme"
+  run_jsdoc "Python §4 Typed" "$typed_readme" "python_4_typed" "$typed_lib/misc.js" "$typed_lib/math.js" "$typed_lib/linked_list.js" "$typed_lib/pairmutator.js" "$typed_lib/list.js" "$typed_lib/stream.js" "$typed_lib/mce.js" &
+  run_jsdoc "MISC (typed)" "README_MISC.md" "MISC_typed" "$typed_lib/misc.js" &
+  run_jsdoc "MATH (typed)" "README_MATH.md" "MATH_typed" "$typed_lib/math.js" &
+  run_jsdoc "LINKED LIST (typed)" "README_LINKED LIST.md" "LINKED LIST_typed" "$typed_lib/linked_list.js" &
+  run_jsdoc "PAIR MUTATOR (typed)" "README_PAIR MUTATOR.md" "PAIR MUTATOR_typed" "$typed_lib/pairmutator.js" &
+  run_jsdoc "LIST (typed)" "README_LIST.md" "LIST_typed" "$typed_lib/list.js" &
+  run_jsdoc "STREAM (typed)" "README_STREAM.md" "STREAM_typed" "$typed_lib/stream.js" &
+  run_jsdoc "MCE (typed)" "README_MCE.md" "MCE_typed" "$typed_lib/mce.js" &
 
   wait
 }

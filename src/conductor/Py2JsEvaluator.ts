@@ -1,7 +1,7 @@
 import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
-import { Py2JsSession } from "../engines/py2js";
+import { Py2JsSession, type Py2JsSessionOptions } from "../engines/py2js";
 import { Py2JsDataVisualizerRunnerPlugin } from "./dataVisualizer/Py2JsDataVisualizerRunnerPlugin";
 import { EvaluatorError } from "./errors";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
@@ -54,11 +54,19 @@ import { registerAutoCompletePlugin } from "./plugins/autocomplete";
  * PyCseEvaluatorBase's identical gate — draw_data doesn't exist as a builtin below that, so there's
  * no reason to register the plugin or have the host fetch its web bundle for §1 users.
  */
-abstract class Py2JsEvaluatorBase extends BasicEvaluator {
+export abstract class Py2JsEvaluatorBase extends BasicEvaluator {
   private readonly session: Py2JsSession;
   private readonly dataVisualizerPlugin?: Py2JsDataVisualizerRunnerPlugin;
 
-  protected constructor(conductor: IRunnerPlugin, variant: number) {
+  /**
+   * `sessionOptions` are more options of the session, over the ones that this evaluator makes (the
+   * typed evaluator gives `beforeResolve`).
+   */
+  protected constructor(
+    conductor: IRunnerPlugin,
+    variant: number,
+    sessionOptions: Partial<Py2JsSessionOptions> = {},
+  ) {
     super(conductor);
     const dataHandler = new GenericDataHandler(variant);
     registerAutoCompletePlugin(conductor, variant);
@@ -86,6 +94,7 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
       fileGetter: path => this.conductor.requestFile(path),
       dataHandler,
       dataVisualizer: this.dataVisualizerPlugin,
+      ...sessionOptions,
     });
   }
 
@@ -114,8 +123,13 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
       await this.session.runChunk(chunk);
       this.conductor.sendResult(undefined);
     } catch (e) {
-      this.conductor.sendError(new EvaluatorError(e));
+      this.reportError(e);
     }
+  }
+
+  /** Sends what went wrong to the host: one error, or more if a subclass has more to say. */
+  protected reportError(e: unknown): void {
+    this.conductor.sendError(new EvaluatorError(e));
   }
 }
 

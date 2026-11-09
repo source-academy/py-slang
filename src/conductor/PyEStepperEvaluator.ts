@@ -5,10 +5,13 @@ import { RunnerStatus } from "@sourceacademy/conductor/types";
 
 import { markBreakpoints } from "../breakpoints";
 import { parse } from "../parser";
+import { StaticTypeErrors } from "../typecheck/errors";
 import { checkEStepperProgram, EStepperProgramError } from "./estepper/getSteps";
 import { PyEStepperRunnerPlugin } from "./estepper/PyEStepperRunnerPlugin";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import { fetchRunConfig } from "./runConfig";
+import { sendStaticTypeErrors } from "./staticTypeErrors";
+import type { BeforeValidation } from "./typed";
 
 /**
  * A Conductor evaluator for Python §3/§4 that drives the environment stepper ("e-stepper"): it
@@ -19,12 +22,17 @@ import { fetchRunConfig } from "./runConfig";
  * is shown with the steps, not echoed to the REPL. `input()` asks the host for a line, as in the CSE
  * evaluator (while the steps are computed). Module imports are not supported yet.
  */
-abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
+export abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
   private readonly eStepper: PyEStepperRunnerPlugin;
 
+  /**
+   * `beforeValidation` is called with each chunk once it is parsed, before it is validated: it may
+   * throw to reject the chunk, and change the program. Python §4 Typed checks the types there.
+   */
   protected constructor(
     conductor: IRunnerPlugin,
     private readonly chapter: number,
+    private readonly beforeValidation?: BeforeValidation,
   ) {
     super(conductor);
     registerAutoCompletePlugin(conductor, chapter);
@@ -50,6 +58,7 @@ abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
     try {
       const script = chunk + "\n";
       const ast = parse(script);
+      await this.beforeValidation?.(script, ast);
       const config = await fetchRunConfig(this.conductor);
       // The gutter's breakpoints are stops for the host's breakpoint navigation, like `breakpoint()`.
       markBreakpoints(ast, config.breakpointLines ?? []);
@@ -64,6 +73,10 @@ abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
       await this.eStepper.sendSteps(ast);
       this.conductor.sendResult(undefined);
     } catch (error) {
+      if (error instanceof StaticTypeErrors) {
+        sendStaticTypeErrors(this.conductor, error.errors);
+        return;
+      }
       this.conductor.sendError(
         error instanceof SyntaxError
           ? new EvaluatorSyntaxError(error.message)

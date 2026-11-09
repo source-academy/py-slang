@@ -431,6 +431,9 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   visitDelStmt(_stmt: StmtNS.Del): [number, bigint] {
     throw new Error("del statements are not supported in parse tree generation");
   }
+  visitTypeAliasStmt(_stmt: StmtNS.TypeAlias): [number, bigint] {
+    throw new Error("type statements are not supported in parse tree generation");
+  }
   visitImportStmt(_stmt: StmtNS.Import): [number, bigint] {
     throw new Error("import statements are not supported in parse tree generation");
   }

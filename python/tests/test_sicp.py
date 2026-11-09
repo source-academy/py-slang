@@ -16,6 +16,31 @@ def test_pairs_and_linked_lists():
     assert length(llist(1, 2, 3)) == 3
 
 
+def test_type_names_exist_for_annotations():
+    # CPython evaluates annotations when a `def` runs, so a program of Python §4 Typed needs these.
+    assert Pair[int, str] and LList[int] and Stream[int] and Callable[[int], int]
+    assert LList[Pair[int, int]] and Stream[LList[int]]
+
+    def length_of(xs: LList[int]) -> int:
+        return 0 if is_none(xs) else 1 + length_of(tail(xs))
+
+    def sieve(s: Stream[int]) -> Stream[int]:
+        return s
+
+    assert length_of(llist(1, 2, 3)) == 3
+    assert sieve(None) is None
+
+
+def test_star_import_keeps_the_builtins_list_and_math():
+    # `sicp.list` and `sicp.math` are modules; `from sicp import *` must not bind them to `list`
+    # and `math`, which would hide Python's own `list` (`list[int]`, `list(...)`).
+    import builtins
+
+    assert list is builtins.list
+    assert list[int] and list((1, 2)) == [1, 2]
+    assert "math" not in globals() or not hasattr(globals()["math"], "math_pi")
+
+
 def test_draw_data_returns_its_first_argument():
     assert draw_data(5) == 5
     assert draw_data(llist(1, 2), 3) == llist(1, 2)

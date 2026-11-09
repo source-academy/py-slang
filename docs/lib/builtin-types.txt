@@ -1,0 +1,13 @@
+# The types of the predeclared names that the type checker takes from Python's standard library (typeshed), not
+# from src/typecheck/prelude.pyi, as the documentation shows them: simplified (the standard library has
+# overloads), and with the difference that bool is not a number. Parameters with a default value end in "= ...".
+def print(*object: object) -> None
+def len[T](s: str | list[T]) -> int
+def abs(x: int | float | complex) -> int | float | complex
+def max(arg1: int | float | str, arg2: int | float | str, *args: int | float | str) -> int | float | str
+def min(arg1: int | float | str, arg2: int | float | str, *args: int | float | str) -> int | float | str
+def round(number: int | float, ndigits: int = ...) -> int | float
+def input(prompt: str = ...) -> str
+def repr(object: object) -> str
+def str(object: object = ...) -> str
+def complex(v: int | float | str | complex = ..., i: int | float | complex = ...) -> complex

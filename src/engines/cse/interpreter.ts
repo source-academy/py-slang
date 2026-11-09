@@ -453,6 +453,7 @@ type StmtKeys = Exclude<
   | "Raise"
   | "With"
   | "Del"
+  | "TypeAlias"
   | "Import"
   | "AugAssign"
   | "AttributeAssign"

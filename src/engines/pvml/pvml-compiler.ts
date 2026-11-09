@@ -1210,6 +1210,11 @@ export class PVMLCompiler
   visitDelStmt(_stmt: StmtNS.Del): ExpressionResult {
     throw new Error("del statements are not supported by the PVML compiler");
   }
+  visitTypeAliasStmt(_stmt: StmtNS.TypeAlias): ExpressionResult {
+    throw new Error(
+      "type statements are not supported by the PVML compiler (they are erased before a program runs)",
+    );
+  }
   visitImportStmt(_stmt: StmtNS.Import): ExpressionResult {
     throw new Error("import statements are not supported by the PVML compiler");
   }
