@@ -162,9 +162,11 @@ number that you give to a module, and `float` for a number that it gives back, a
 
 ## Types of the predeclared names
 
-`Any` in a declaration means that any type is accepted there (you cannot write `Any` in a program),
 `TypeIs[T]` means `bool`, and in addition narrows the type of the argument to `T`, and `NoReturn` is the result
-of a function that never returns (`error`; you cannot write it in a program either).
+of a function that never returns (`error`; you cannot write it in a program either). `Any` appears only in the
+`TypeIs` of `is_list` and `is_pair`, where any type is accepted (you cannot write `Any` in a program).
+`tail` and `stream_tail` have two declarations: the first is for linked lists and streams, so that the tail of
+an `LList[int]` is an `LList[int]`, and the second is for any other pair.
 
 <!-- PRELUDE -->
 
