@@ -5,7 +5,7 @@ import { CHECKER_SETUP_TIMEOUT_MS, startTypedChecker } from "./typecheck-harness
 // much longer than the 5 seconds that a test has by default.
 jest.setTimeout(60_000);
 
-describe("the Typed Python §4 checker", () => {
+describe("the Python §4 Typed checker", () => {
   let checker: TypedPythonChecker;
   beforeAll(async () => {
     checker = await startTypedChecker();

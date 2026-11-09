@@ -5,7 +5,7 @@ import { ASTNode, FeatureNotSupportedError, FeatureValidator } from "../types";
 const TYPING_MODULES = new Set(["typing", "typing_extensions", "collections.abc"]);
 
 /**
- * Typed Python §4: types need no import. `Callable`, `Pair`, `LList` and `Stream` are predeclared,
+ * Python §4 Typed: types need no import. `Callable`, `Pair`, `LList` and `Stream` are predeclared,
  * and there is no `Any` (the specification, "Static Type Checking"). So `from typing import …` is
  * rejected with that said, and not with a missing module at run time. (A local file with that name,
  * `from .typing import x`, is not meant.)

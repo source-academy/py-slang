@@ -1,4 +1,4 @@
-"""The names that a program of Typed Python §4 uses in its type annotations.
+"""The names that a program of Python §4 Typed uses in its type annotations.
 
 CPython evaluates the annotations of a function when its ``def`` runs, so the
 names in them have to exist: ``def length(xs: LList[int]) -> int`` fails with a

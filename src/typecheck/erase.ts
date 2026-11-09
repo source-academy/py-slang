@@ -2,7 +2,7 @@ import { ExprNS, StmtNS } from "../ast-types";
 import { ASTNode, traverseAST } from "../validator";
 
 /**
- * Erases the types of a Typed Python §4 program, in place, so that it is a Python §4 program, which
+ * Erases the types of a Python §4 Typed program, in place, so that it is a Python §4 program, which
  * every engine runs:
  *
  * - parameter annotations, return annotations and type parameters of every `def` are removed,
@@ -14,7 +14,7 @@ import { ASTNode, traverseAST } from "../validator";
  * declaration without a value, `x: int`, would become the assignment `x = None`.
  *
  * The statements of `class`, `try`, `with` and `for a, b in` blocks are not rewritten: the
- * sublanguages that Typed Python §4 builds on do not have those statements.
+ * sublanguages that Python §4 Typed builds on do not have those statements.
  */
 export function eraseTypes<T extends ASTNode>(program: T): T {
   // The arrays of statements to rewrite, found first: replacing statements while the tree is walked

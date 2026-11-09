@@ -1,5 +1,5 @@
 /**
- * Typed Python §4 (docs/typed-python-4.md), phase 1: the parser accepts type annotations, the plain
+ * Python §4 Typed (docs/typed-python-4.md), phase 1: the parser accepts type annotations, the plain
  * sublanguages reject them, the typed validators require them, and a program with its types erased
  * behaves exactly like the same program without them, on every engine.
  */
@@ -133,7 +133,7 @@ describe("the sublanguages without types reject type syntax", () => {
   });
 });
 
-describe("Typed Python §4 requires annotations on every def", () => {
+describe("Python §4 Typed requires annotations on every def", () => {
   const prepare = (code: string) => prepareTypedProgram(toPythonAst(code));
 
   test("an annotated program is accepted", () => {
@@ -275,7 +275,7 @@ describe("erasing types", () => {
   });
 });
 
-/** Programs of Typed Python §4, each with the Python §4 program that it is without its types. */
+/** Programs of Python §4 Typed, each with the Python §4 program that it is without its types. */
 const programs: Record<string, { typed: string; plain: string; output: string }> = {
   recursion: {
     typed: [
@@ -423,7 +423,7 @@ describe("a program behaves the same with its types erased, on every engine", ()
 
   beforeAll(() => {
     // The engines parse the source text that they are given. Erase the types of what they parse, as
-    // the Typed Python §4 evaluator will do before it hands the program on (a plain program has no
+    // the Python §4 Typed evaluator will do before it hands the program on (a plain program has no
     // types to erase).
     jest
       .spyOn(parserAdapter, "parse")

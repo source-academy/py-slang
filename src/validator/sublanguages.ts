@@ -112,7 +112,7 @@ export function makeChapter4Validators(): FeatureValidator[] {
 }
 
 /**
- * Typed Python §4 (docs/typed-python-4.md): Python §4 with type annotations. The rules on the
+ * Python §4 Typed (docs/typed-python-4.md): Python §4 with type annotations. The rules on the
  * annotations themselves: every `def` annotates its parameters and its return type, a name is
  * declared by an assignment (`x: int = 0`), not on its own (`x: int`), and types need no import.
  *

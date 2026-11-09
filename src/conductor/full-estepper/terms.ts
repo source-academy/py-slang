@@ -65,7 +65,7 @@ function unsupportedParameters(params: ExprNS.Lambda["parameters"]): string | un
 }
 
 /**
- * The parser accepts the annotations of a `def` (Typed Python §4), but CPython evaluates them when
+ * The parser accepts the annotations of a `def` (Python §4 Typed), but CPython evaluates them when
  * the `def` runs, which this engine does not do yet: a program with annotations is not run.
  */
 function unsupportedAnnotations(def: StmtNS.FunctionDef): string | undefined {

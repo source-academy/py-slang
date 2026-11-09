@@ -1,7 +1,7 @@
 /**
  * Pyright's messages say what its type system found, in its own words: `Literal['five']`,
  * `Pair[H@head, Any]`, `Pair[int, LList] | None`, and a second line of detail that repeats the first.
- * This turns them into messages for students of Typed Python §4: the types that the student wrote
+ * This turns them into messages for students of Python §4 Typed: the types that the student wrote
  * (int, str, LList[int]), the names of the functions, and, for the mistakes that students make most,
  * what to do.
  *
@@ -108,6 +108,12 @@ const REWRITES: { pattern: RegExp; message: (match: RegExpExecArray) => string }
     pattern: /^Type `Any` is not allowed/,
     message: () =>
       "The type Any is not available: for a function that works for any type, use a type parameter, as in def f[A](x: A) -> A",
+  },
+  {
+    // from m import x, where nothing is known of the types of m
+    pattern: /^Import "(.*)" could not be resolved$/,
+    message: ([, name]) =>
+      `The module ${name} cannot be imported: its types are not known to Python §4 Typed`,
   },
   {
     pattern: /^Type of "(.*)" is (?:partially )?unknown/,

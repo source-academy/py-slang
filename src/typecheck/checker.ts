@@ -3,6 +3,8 @@ import { parse } from "../parser/parser-adapter";
 import { traverseAST } from "../validator";
 import { PyrightClient, type WorkerFactory } from "./client";
 import { tidy, toTypeDiagnostic, type TypeDiagnostic } from "./diagnostics";
+import { toStub, UnknownDescriptionError } from "./module-description";
+import { temporaryDescriptions, type DescriptionSource } from "./modules";
 
 /** What a program binds at its top level: what a later REPL chunk can use. */
 export interface TopLevelNames {
@@ -65,8 +67,29 @@ function namesOfChunk(source: string): TopLevelNames {
   }
 }
 
+/** The names of the modules that a program imports (`from rune import show`), not its own files (`from .x import y`). */
+function importedModules(source: string): string[] {
+  const text = source.endsWith("\n") ? source : source + "\n";
+  const modules = new Set<string>();
+  try {
+    traverseAST(parse(text), node => {
+      if (node instanceof StmtNS.FromImport && node.level === 0) modules.add(node.module.lexeme);
+    });
+  } catch {
+    // Not a program: the checker reports why.
+  }
+  return [...modules];
+}
+
+/** A chunk that has been checked and is not part of the session yet: see {@link TypedPythonChecker.proposeChunk}. */
+export interface ProposedChunk {
+  diagnostics: TypeDiagnostic[];
+  /** Makes the chunk part of the session: later chunks can use its names and their types. */
+  accept(): void;
+}
+
 /**
- * The type checker of Typed Python §4: pyright, in a worker, with Source Python's builtins and
+ * The type checker of Python §4 Typed: pyright, in a worker, with Source Python's builtins and
  * prelude (see src/typecheck/bundler/). Give it the program as it is written, with its annotations:
  * the program's line numbers are the diagnostics' line numbers.
  */
@@ -78,10 +101,66 @@ export class TypedPythonChecker {
   /** For each name that a chunk declared with a type, the text of the type (of the last that did). */
   private readonly declared = new Map<string, string>();
 
-  private constructor(private readonly client: PyrightClient) {}
+  /** The modules whose stubs the checker has been given. */
+  private readonly provided = new Set<string>();
 
-  static async start(createWorker: WorkerFactory): Promise<TypedPythonChecker> {
-    return new TypedPythonChecker(await PyrightClient.start(createWorker));
+  private constructor(
+    private readonly client: PyrightClient,
+    private readonly descriptions: DescriptionSource,
+  ) {}
+
+  /** `descriptions` says what the types of an imported module are (see {@link provideModules}). */
+  static async start(
+    createWorker: WorkerFactory,
+    descriptions: DescriptionSource = temporaryDescriptions,
+  ): Promise<TypedPythonChecker> {
+    return new TypedPythonChecker(await PyrightClient.start(createWorker), descriptions);
+  }
+
+  /**
+   * Gives the checker the types of the modules that the program imports, as stubs: a file `rune.pyi`
+   * for `from rune import show`, from the module's description (module-description.ts). A module
+   * with no description is not given: checking reports that the import cannot be resolved. A
+   * description that this version cannot read is reported here, at the first line.
+   */
+  private async provideModules(source: string): Promise<TypeDiagnostic[]> {
+    const problems: TypeDiagnostic[] = [];
+    for (const module of importedModules(source)) {
+      if (this.provided.has(module)) continue;
+      const description = this.descriptions(module);
+      if (!description) continue;
+      try {
+        // `foo.bar` is the file foo/bar.pyi, where pyright looks for it.
+        // The source gave the description of another module (stale, or misrouted).
+        if (description.module !== module)
+          throw new UnknownDescriptionError(
+            `it describes the module ${description.module}, not ${module}`,
+          );
+        const stub = toStub(description);
+        const found = await this.client.check(`${module.replace(/\./g, "/")}.pyi`, stub);
+        // A description can make a stub that does not check (an opaque type with the name of a
+        // builtin): reject it, so that programs are not checked against a broken signature.
+        const broken = found.find(d => d.severity === 1);
+        if (broken)
+          throw new UnknownDescriptionError(
+            `its stub has an error: ${broken.message.split("\n")[0]}`,
+          );
+        this.provided.add(module);
+      } catch (cause) {
+        if (!(cause instanceof UnknownDescriptionError)) throw cause;
+        const message = `The types of the module ${module} cannot be used: ${cause.message}`;
+        problems.push({
+          severity: "error",
+          message,
+          original: message,
+          line: 1,
+          column: 0,
+          endLine: 1,
+          endColumn: 0,
+        });
+      }
+    }
+    return problems;
   }
 
   /**
@@ -89,8 +168,9 @@ export class TypedPythonChecker {
    * version of the same program, as when the student types.
    */
   async check(source: string): Promise<TypeDiagnostic[]> {
+    const problems = await this.provideModules(source);
     const diagnostics = await this.client.check("main.py", source);
-    return tidy(diagnostics.map(d => toTypeDiagnostic(d)));
+    return tidy([...problems, ...diagnostics.map(d => toTypeDiagnostic(d))]);
   }
 
   /**
@@ -99,6 +179,19 @@ export class TypedPythonChecker {
    * have). A chunk with errors is not.
    */
   async checkChunk(source: string): Promise<TypeDiagnostic[]> {
+    const proposed = await this.proposeChunk(source);
+    if (!proposed.diagnostics.some(d => d.severity === "error")) proposed.accept();
+    return proposed.diagnostics;
+  }
+
+  /**
+   * Checks a chunk of a REPL session, as {@link checkChunk} does, but remembers nothing: the chunk
+   * is part of the session only when `accept()` is called. An engine has more to say about a chunk
+   * than the types do (the Resolver rejects a name that Python §4 lacks, such as `sorted`), and a
+   * chunk that is not run must not leave its names, and its declared types, in the session.
+   * The next proposal replaces one that was not accepted.
+   */
+  async proposeChunk(source: string): Promise<ProposedChunk> {
     // Each chunk is a file of its own, which imports the names that earlier chunks bound, from the
     // last chunk that bound each. (`import *` would skip the names that start with an underscore.)
     //
@@ -131,21 +224,28 @@ export class TypedPythonChecker {
     ];
 
     const index = this.chunks;
-    const diagnostics = tidy(
-      (await this.client.check(`chunk_${index}.py`, [...header, source].join("\n"))).map(d =>
+    const problems = await this.provideModules(source);
+    const diagnostics = tidy([
+      ...problems,
+      ...(await this.client.check(`chunk_${index}.py`, [...header, source].join("\n"))).map(d =>
         toTypeDiagnostic(d, header.length),
       ),
-    );
+    ]);
 
-    if (!diagnostics.some(d => d.severity === "error")) {
-      this.chunks++;
-      for (const name of own.all) this.bound.set(name, index);
-      // A function or a type alias replaces a variable that was declared with a type: the type is
-      // not the name's any more.
-      for (const name of own.definitions) this.declared.delete(name);
-      for (const [name, annotation] of own.annotations) this.declared.set(name, annotation);
-    }
-    return diagnostics;
+    let accepted = false;
+    return {
+      diagnostics,
+      accept: () => {
+        if (accepted || this.chunks !== index) return;
+        accepted = true;
+        this.chunks++;
+        for (const name of own.all) this.bound.set(name, index);
+        // A function or a type alias replaces a variable that was declared with a type: the type is
+        // not the name's any more.
+        for (const name of own.definitions) this.declared.delete(name);
+        for (const [name, annotation] of own.annotations) this.declared.set(name, annotation);
+      },
+    };
   }
 
   /** Stops the workers. */

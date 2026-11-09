@@ -1,5 +1,5 @@
 /**
- * The type checker on programs of Typed Python §4 (src/tests/typecheck-cases/). In a file, a line
+ * The type checker on programs of Python §4 Typed (src/tests/typecheck-cases/). In a file, a line
  * that ends with `# ERROR` must have an error, `# ERROR: text` one whose message contains the text;
  * every other line must have none. The `ok_` files are correct programs: no line has an error, and
  * they satisfy the rules that py-slang checks itself (an annotation on every def).

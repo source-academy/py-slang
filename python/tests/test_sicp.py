@@ -17,7 +17,7 @@ def test_pairs_and_linked_lists():
 
 
 def test_type_names_exist_for_annotations():
-    # CPython evaluates annotations when a `def` runs, so a program of Typed Python 4 needs these.
+    # CPython evaluates annotations when a `def` runs, so a program of Python §4 Typed needs these.
     assert Pair[int, str] and LList[int] and Stream[int] and Callable[[int], int]
     assert LList[Pair[int, int]] and Stream[LList[int]]
 
