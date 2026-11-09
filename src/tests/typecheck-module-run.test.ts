@@ -5,10 +5,12 @@
  */
 import { DataType, type TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
+import { StmtNS } from "../ast-types";
+import { parse } from "../parser/parser-adapter";
 import { GenericDataHandler } from "../conductor/GenericDataHandler";
 import { typedBeforeValidation } from "../conductor/typed";
 import { Py2JsSession } from "../engines/py2js";
-import { StaticTypeErrors, type TypedPythonChecker } from "../typecheck";
+import { eraseTypes, StaticTypeErrors, type TypedPythonChecker } from "../typecheck";
 import { CHECKER_SETUP_TIMEOUT_MS, startTypedChecker } from "./typecheck-harness";
 
 jest.setTimeout(60_000);
@@ -87,4 +89,38 @@ test("a module that has no description cannot be imported", async () => {
   expect((error as StaticTypeErrors).errors.map(e => e.message)).toContainEqual(
     expect.stringContaining("The module physics cannot be imported: its types are not known"),
   );
+});
+
+test("a program imports the type of a module to annotate with it, and runs although the module does not export it", async () => {
+  const { session, outputs } = await setUp();
+  await session.runChunk(
+    "from rune import heart, scale, Rune\n" +
+      "def half(r: Rune) -> Rune:\n    return scale(0.5, r)\n" +
+      "print(half(heart) is not heart)\n",
+  );
+  expect(outputs).toEqual(["True"]);
+});
+
+describe("the names that a program imports only as types", () => {
+  const erased = (source: string) =>
+    eraseTypes(parse(source), () => new Set(["Rune"])).statements[0];
+
+  test("are left out of the import, which stays if other names are imported", () => {
+    const stmt = erased("from rune import heart, Rune\n") as StmtNS.FromImport;
+    expect(stmt).toBeInstanceOf(StmtNS.FromImport);
+    expect(stmt.names.map(({ name }) => name.lexeme)).toEqual(["heart"]);
+  });
+
+  test("make the import a pass, if nothing else is imported", () => {
+    expect(erased("from rune import Rune\n")).toBeInstanceOf(StmtNS.Pass);
+  });
+
+  test("are left alone if the module has no types of that name", () => {
+    expect(
+      (
+        eraseTypes(parse("from sound import Rune\n"), () => undefined)
+          .statements[0] as StmtNS.FromImport
+      ).names,
+    ).toHaveLength(1);
+  });
 });

@@ -196,6 +196,10 @@ A program can import names from the Source Academy modules whose types are known
 type of argument is an error, as for the functions of the program. A module whose types are not
 known cannot be imported: the import is an error.
 
+The types that a module defines (\texttt{Rune} of \texttt{rune}, \texttt{Sound} of
+\texttt{sound}) are imported like the functions, to annotate with them:
+\lstinline{from rune import Rune}. A name that is only a type is not part of the program that runs.
+
 A number that a module's function takes can be an int or a float. A number that it returns is a
 float, and so is a number that it passes on to a function of the program.
 

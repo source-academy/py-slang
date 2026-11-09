@@ -11,6 +11,11 @@ export interface ChunkChecker {
   proposeChunk(source: string): Promise<ProposedChunk>;
   /** Checks a program that is not part of a session. */
   check(source: string): Promise<TypeDiagnostic[]>;
+  /**
+   * The names that a module defines only as types (`Rune` of `rune`): a program imports them to annotate,
+   * and they are left out of the program that runs, as the module does not export them.
+   */
+  typeNames?(module: string): ReadonlySet<string> | undefined;
 }
 
 /**
@@ -52,7 +57,7 @@ export async function checkTypedChunk(
   validateTypedProgram(program);
   const proposed = await checker.proposeChunk(source);
   rejectErrors(proposed.diagnostics);
-  eraseTypes(program);
+  eraseTypes(program, module => checker.typeNames?.(module));
   return proposed.accept;
 }
 
@@ -67,5 +72,5 @@ export async function checkTypedProgram(
 ): Promise<void> {
   validateTypedProgram(program);
   rejectErrors(await checker.check(source));
-  eraseTypes(program);
+  eraseTypes(program, module => checker.typeNames?.(module));
 }

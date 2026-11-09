@@ -243,3 +243,10 @@ export function toStub(description: ModuleDescription): string {
     lines.push(`${name}: ${pythonType(type, { opaque, parameters: new Set() }, "out")}`);
   return lines.join("\n") + "\n";
 }
+
+/** The names that a module defines only as types (its opaque types): a program imports them to annotate, and they are not exports at run time. */
+export function opaqueTypeNames(description: ModuleDescription): ReadonlySet<string> {
+  return new Set(
+    description.opaqueTypes.map(type => (typeof type === "string" ? type : type.name)),
+  );
+}
