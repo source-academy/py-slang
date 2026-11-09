@@ -16,8 +16,15 @@ export type TypeDescription =
   | "string"
   | "boolean"
   | "void"
-  /** A value that the module defines and that a program can only pass back to it, by the name of its type. */
-  | { opaque: string }
+  /** A value of any type, which the function inspects (`is_tree`): `object`, which a program can only pass on. */
+  | "any"
+  /**
+   * A value that the module defines and that a program can only pass back to it, by the name of its
+   * type; with the types that it is applied to, if the type has type parameters (`BinaryTree[A]`).
+   */
+  | { opaque: string; arguments?: TypeDescription[] }
+  /** A type parameter of the function that this type is a part of (`A` in `entry[A]`). */
+  | { parameter: string }
   /** A linked list, a pair, an array (a Python list), and a function: with the types of their parts. */
   | { list: TypeDescription }
   | { pair: [TypeDescription, TypeDescription] }
@@ -29,13 +36,27 @@ export interface ParameterDescription {
   type: TypeDescription;
 }
 
+/** An opaque type that has type parameters: a tree of entries of type `A`, a `BinaryTree[A]`. */
+export interface GenericOpaqueType {
+  name: string;
+  typeParameters: string[];
+}
+
+export interface FunctionDescription {
+  name: string;
+  /** The type parameters of a function that works for several types (`make_tree[A]`). */
+  typeParameters?: string[];
+  params: ParameterDescription[];
+  returns: TypeDescription;
+}
+
 export interface ModuleDescription {
   version: typeof MODULE_DESCRIPTION_VERSION;
   /** The name that a program imports: `rune`. */
   module: string;
-  /** The names of the opaque types that the module defines (`Rune`). */
-  opaqueTypes: string[];
-  functions: { name: string; params: ParameterDescription[]; returns: TypeDescription }[];
+  /** The opaque types that the module defines: a name (`Rune`), or a name with type parameters. */
+  opaqueTypes: (string | GenericOpaqueType)[];
+  functions: FunctionDescription[];
   constants: { name: string; type: TypeDescription }[];
 }
 
@@ -47,12 +68,45 @@ export class UnknownDescriptionError extends Error {
   }
 }
 
-function pythonType(type: TypeDescription, opaque: ReadonlySet<string>): string {
+/** What a type may refer to: the opaque types (with their number of type parameters), and the type parameters in scope. */
+interface Scope {
+  opaque: ReadonlyMap<string, number>;
+  parameters: ReadonlySet<string>;
+}
+
+/**
+ * Which way a value goes: `in` is what a program passes to the module (a parameter), `out` what it
+ * receives (a result). A function type turns its parameters around: the parameter of a callback that a
+ * program passes in is received by the program.
+ */
+type Direction = "in" | "out";
+
+const turned = (direction: Direction): Direction => (direction === "in" ? "out" : "in");
+
+/**
+ * What the runtime does at the boundary of a module (src/engines/py2js/moduleInterop.ts): a Python int
+ * becomes a JS number, a module's number comes back as a float, and integers are not part of the module
+ * interface. So `number` is `int | float` going in (as the prelude's `math_*` are), and `float` coming out;
+ * `integer` marks a parameter that must be whole, and is `int` going in. It is not a result: a result
+ * comes back as a float. In an array, a linked list, a pair and in the arguments of an opaque type, which are invariant, a number
+ * is `float` both ways: a value that a module returns can be passed back to it.
+ */
+function pythonType(
+  type: TypeDescription,
+  scope: Scope,
+  direction: Direction,
+  /** Inside an array, which is invariant: the element type is the same going in and coming out. */
+  exact = false,
+): string {
   if (typeof type === "string") {
     switch (type) {
       case "number":
-        return "float"; // an int is accepted where a float is wanted
+        return direction === "in" && !exact ? "int | float" : "float";
       case "integer":
+        if (direction === "out")
+          throw new UnknownDescriptionError(
+            "integer is for a parameter that must be whole: a result is a number",
+          );
         return "int";
       case "string":
         return "str";
@@ -60,21 +114,38 @@ function pythonType(type: TypeDescription, opaque: ReadonlySet<string>): string 
         return "bool";
       case "void":
         return "None";
+      case "any":
+        return "object";
     }
     throw new UnknownDescriptionError(`the type "${String(type)}"`);
   }
   if ("opaque" in type) {
-    if (!opaque.has(type.opaque))
+    const arity = scope.opaque.get(type.opaque);
+    if (arity === undefined)
       throw new UnknownDescriptionError(`the opaque type ${type.opaque} is not declared`);
-    return type.opaque;
+    const given = type.arguments ?? [];
+    if (given.length !== arity)
+      throw new UnknownDescriptionError(
+        `the opaque type ${type.opaque} has ${arity} type parameters, not ${given.length}`,
+      );
+    return arity === 0
+      ? type.opaque
+      : `${type.opaque}[${given.map(t => pythonType(t, scope, direction, true)).join(", ")}]`;
   }
-  if ("list" in type) return `LList[${pythonType(type.list, opaque)}]`;
+  if ("parameter" in type) {
+    if (!scope.parameters.has(type.parameter))
+      throw new UnknownDescriptionError(`the type parameter ${type.parameter} is not declared`);
+    return type.parameter;
+  }
+  if ("list" in type) return `_LList[${pythonType(type.list, scope, direction, true)}]`;
   if ("pair" in type)
-    return `Pair[${pythonType(type.pair[0], opaque)}, ${pythonType(type.pair[1], opaque)}]`;
-  if ("array" in type) return `list[${pythonType(type.array, opaque)}]`;
+    return `_Pair[${pythonType(type.pair[0], scope, direction, true)}, ${pythonType(type.pair[1], scope, direction, true)}]`;
+  if ("array" in type) return `list[${pythonType(type.array, scope, direction, true)}]`;
   if ("function" in type) {
-    const params = type.function.params.map(p => pythonType(p, opaque)).join(", ");
-    return `_Callable[[${params}], ${pythonType(type.function.returns, opaque)}]`;
+    const params = type.function.params
+      .map(p => pythonType(p, scope, turned(direction), exact))
+      .join(", ");
+    return `_Callable[[${params}], ${pythonType(type.function.returns, scope, direction, exact)}]`;
   }
   throw new UnknownDescriptionError(`the type ${JSON.stringify(type)}`);
 }
@@ -84,12 +155,34 @@ const KEYWORDS = new Set(
     " ",
   ),
 );
-/** The names that the stub itself uses for types: an opaque type with one of them would change what they mean. */
-const TYPE_NAMES = new Set(["int", "float", "str", "bool", "list", "Pair", "LList"]);
+/**
+ * The names that the stub itself uses for types. A name that the module declares (an opaque type, a type
+ * parameter, a function, a constant) with one of them would change what they mean in the rest of the stub:
+ * a type parameter `int` makes an `integer` parameter any type.
+ */
+const RESERVED = new Set([
+  "int",
+  "float",
+  "str",
+  "bool",
+  "list",
+  "object",
+  "None",
+  "Pair",
+  "LList",
+  "_Callable",
+  "_NoReturn",
+  "_LList",
+  "_Pair",
+]);
 
 function checkName(name: string, what: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || KEYWORDS.has(name))
     throw new UnknownDescriptionError(`${JSON.stringify(name)} is not a name for ${what}`);
+  if (RESERVED.has(name))
+    throw new UnknownDescriptionError(
+      `${name} cannot be the name of ${what}: the stub uses it for a type`,
+    );
 }
 
 /**
@@ -99,31 +192,61 @@ function checkName(name: string, what: string): void {
 export function toStub(description: ModuleDescription): string {
   if (description.version !== MODULE_DESCRIPTION_VERSION)
     throw new UnknownDescriptionError(`version ${String(description.version)}`);
-  const opaque = new Set(description.opaqueTypes);
-  for (const name of description.opaqueTypes) {
+  const opaque = new Map<string, number>();
+  const classes: string[] = [];
+  for (const type of description.opaqueTypes) {
+    const { name, typeParameters } =
+      typeof type === "string" ? { name: type, typeParameters: [] } : type;
     checkName(name, "a type");
-    if (TYPE_NAMES.has(name))
-      throw new UnknownDescriptionError(`the opaque type cannot be named ${name}`);
+    typeParameters.forEach(parameter => checkName(parameter, "a type parameter"));
+    opaque.set(name, typeParameters.length);
+    // An opaque value is only received from the module and passed back to it: no program makes
+    // one. The constructor takes an argument that no value has, so `Rune()` and `Rune(x)` are errors.
+    // A type parameter is used by a member, so that it is invariant: a `BinaryTree[int]` is not a
+    // `BinaryTree[str]` (a parameter that nothing uses would accept either). Not a private name:
+    // pyright leaves those out when it works out the variance.
+    classes.push(
+      `class ${name}${typeParameters.length ? `[${typeParameters.join(", ")}]` : ""}:`,
+      ...typeParameters.map(parameter => `    type_parameter_${parameter}: ${parameter}`),
+      "    def __init__(self, _never: _NoReturn, /) -> None: ...",
+    );
   }
-  for (const { name, params } of description.functions) {
+  for (const { name, params, typeParameters } of description.functions) {
     checkName(name, "a function");
     for (const parameter of params) checkName(parameter.name, "a parameter");
+    for (const parameter of typeParameters ?? []) {
+      checkName(parameter, "a type parameter");
+      // `def f[T]() -> T` would turn a reference to an opaque type `T` into one to the parameter.
+      if (opaque.has(parameter))
+        throw new UnknownDescriptionError(
+          `the type parameter ${parameter} of ${name} has the name of an opaque type`,
+        );
+    }
   }
   for (const { name } of description.constants) checkName(name, "a constant");
   const lines = [
     "from typing import Callable as _Callable, NoReturn as _NoReturn",
-    // An opaque value is only received from the module and passed back to it: no program makes
-    // one. The constructor takes an argument that no value has, so `Rune()` and `Rune(x)` are errors.
-    ...description.opaqueTypes.map(
-      name => `class ${name}:\n    def __init__(self, _never: _NoReturn, /) -> None: ...`,
-    ),
+    // The names of the prelude (Pair, LList) are the builtins of a program, but a stub must import them.
+    "from __builtins__ import LList as _LList, Pair as _Pair",
+    ...classes,
   ];
-  for (const { name, params, returns } of description.functions) {
-    const parameters = params.map(p => `${p.name}: ${pythonType(p.type, opaque)}`);
+  for (const { name, params, returns, typeParameters = [] } of description.functions) {
+    const scope = { opaque, parameters: new Set(typeParameters) };
+    const parameters = params.map(p => `${p.name}: ${pythonType(p.type, scope, "in")}`);
     if (parameters.length > 0) parameters.push("/");
-    lines.push(`def ${name}(${parameters.join(", ")}) -> ${pythonType(returns, opaque)}: ...`);
+    const generic = typeParameters.length ? `[${typeParameters.join(", ")}]` : "";
+    lines.push(
+      `def ${name}${generic}(${parameters.join(", ")}) -> ${pythonType(returns, scope, "out")}: ...`,
+    );
   }
   for (const { name, type } of description.constants)
-    lines.push(`${name}: ${pythonType(type, opaque)}`);
+    lines.push(`${name}: ${pythonType(type, { opaque, parameters: new Set() }, "out")}`);
   return lines.join("\n") + "\n";
+}
+
+/** The names that a module defines only as types (its opaque types): a program imports them to annotate, and they are not exports at run time. */
+export function opaqueTypeNames(description: ModuleDescription): ReadonlySet<string> {
+  return new Set(
+    description.opaqueTypes.map(type => (typeof type === "string" ? type : type.name)),
+  );
 }

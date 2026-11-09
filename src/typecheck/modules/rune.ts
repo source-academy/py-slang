@@ -2,14 +2,14 @@ import type { ModuleDescription } from "../module-description";
 
 /**
  * TEMPORARY: the types of `rune`, written by hand from the declarations of the module (the
- * `Rune` type, the functions of functions.ts, and the functions that the plugin defines: `show`,
+ * `Rune` type, `AnimatedRune` for what the animations return (no rune function takes one), the functions of functions.ts, and the functions that the plugin defines: `show`,
  * `anaglyph`, `hollusion`, `hollusion_magnitude`, `animate_rune`, `animate_anaglyph`). To be removed
  * when the module publishes its own description (source-academy/modules#996).
  */
 export const RUNE: ModuleDescription = {
   version: 1,
   module: "rune",
-  opaqueTypes: ["Rune"],
+  opaqueTypes: ["Rune", "AnimatedRune"],
   functions: [
     {
       name: "anaglyph",
@@ -21,18 +21,24 @@ export const RUNE: ModuleDescription = {
       params: [
         { name: "duration", type: "number" },
         { name: "fps", type: "number" },
-        { name: "func", type: { function: { params: ["number"], returns: { opaque: "Rune" } } } },
+        {
+          name: "func",
+          type: { function: { params: ["number"], returns: { opaque: "Rune" } } },
+        },
       ],
-      returns: { opaque: "Rune" },
+      returns: { opaque: "AnimatedRune" },
     },
     {
       name: "animate_rune",
       params: [
         { name: "duration", type: "number" },
         { name: "fps", type: "number" },
-        { name: "func", type: { function: { params: ["number"], returns: { opaque: "Rune" } } } },
+        {
+          name: "func",
+          type: { function: { params: ["number"], returns: { opaque: "Rune" } } },
+        },
       ],
-      returns: { opaque: "Rune" },
+      returns: { opaque: "AnimatedRune" },
     },
     {
       name: "beside",
@@ -229,7 +235,7 @@ export const RUNE: ModuleDescription = {
     {
       name: "stackn",
       params: [
-        { name: "n", type: "number" },
+        { name: "n", type: "integer" },
         { name: "rune", type: { opaque: "Rune" } },
       ],
       returns: { opaque: "Rune" },

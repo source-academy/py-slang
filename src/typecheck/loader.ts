@@ -2,6 +2,8 @@ import { TypedPythonChecker, type ProposedChunk } from "./checker";
 import type { WorkerLike } from "./client";
 import type { TypeDiagnostic } from "./diagnostics";
 import { TypeCheckerUnavailableError } from "./errors";
+import { opaqueTypeNames } from "./module-description";
+import { temporaryDescriptions, type DescriptionSource } from "./modules";
 import type { ChunkChecker } from "./typed-chunk";
 
 /** Where the worker of the Python §4 Typed checker is published: next to the evaluators. */
@@ -38,7 +40,32 @@ export class LazyChecker implements ChunkChecker {
   /** The chunks of the session that were accepted, in order. */
   private readonly accepted: string[] = [];
 
-  constructor(private readonly start: () => Promise<TypedPythonChecker> = startBrowserChecker) {}
+  /**
+   * `descriptions` is what the checker that `start` makes uses to know the types of modules (the same
+   * source, so that the names that are only types are the same).
+   */
+  constructor(
+    private readonly start: () => Promise<TypedPythonChecker> = startBrowserChecker,
+    private readonly descriptions: DescriptionSource = temporaryDescriptions,
+  ) {}
+
+  /** The names that accepted chunks bound only as types: kept here, so that a new checker is told nothing of them. */
+  private readonly typeBindingNames = new Set<string>();
+
+  typeBindings(): ReadonlySet<string> {
+    return this.typeBindingNames;
+  }
+
+  rememberTypeBindings(types: ReadonlySet<string>, rebound: ReadonlySet<string>): void {
+    for (const name of rebound) this.typeBindingNames.delete(name);
+    for (const name of types) this.typeBindingNames.add(name);
+  }
+
+  /** The names that a module defines only as types: known without waiting for the checker to load. */
+  typeNames(module: string): ReadonlySet<string> | undefined {
+    const description = this.descriptions(module);
+    return description && description.module === module ? opaqueTypeNames(description) : undefined;
+  }
 
   /** Starts loading now, so that the checker is ready when the first program is run. */
   preload(): void {

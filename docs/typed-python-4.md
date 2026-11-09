@@ -403,6 +403,12 @@ and is **settled**; the work in the `modules` repository is [#997](https://githu
   int or a float); in an array, which is invariant, a number is `float` both ways. `integer` marks a
   parameter that must be whole (`stackn`'s `n`, the `num_points` of the drawers of `curve`): it is `int`, and
   is not allowed as a result.
+  * **Known limitation** (decided with Martin; [modules#998](https://github.com/source-academy/modules/issues/998)):
+    a type parameter keeps the type that it was given, but an `int` that passes through a generic function
+    (`BinaryTree[A]`, `repeat`) comes back as a float, so `xs[entry(t)]` passes the check and fails at run
+    time. Python types cannot say "an `int` goes in, a float comes out" for a type parameter. It is
+    documented in the specification, and the fix (if one is wanted) is in the module interface, not in the
+    descriptions.
 * **Loading**: before a chunk is checked, the evaluator fetches the description of each module that it
   imports, as it fetches the module, and gives the stubs to the checker.
 * **A module with no description cannot be imported** from a typed language (there is no `Any` to give its
@@ -422,17 +428,20 @@ and is **settled**; the work in the `modules` repository is [#997](https://githu
   including the shapes that a module exports dynamically. It describes the TypeScript API, not the
   conductor-level surface that Python sees, so it can feed the generator but is not relied on alone.
 
-**Done so far (first part of phase 4):**
+**Done so far (phase 4, in py-slang):**
 
-* `src/typecheck/module-description.ts`: the description format (version 1: `number`, `integer`, `string`,
-  `boolean`, `void`, opaque types, `list`, `pair`, `array`, `function`) and `toStub`, the mapper to a Python
-  stub. An unknown version or kind is rejected with a message that says so.
-* The checker gives the stub of each module that a program imports (`from rune import show`) to pyright as
-  `rune.pyi`, once, for checks and for REPL chunks. A module with no description is the error "The module
-  X cannot be imported: its types are not known to Python §4 Typed".
-* `src/typecheck/modules/`: the temporary description of `rune`. `curve`, `sound` and `binary_tree` follow,
-  and all of them go when the modules publish their own descriptions (modules#996).
-* Not yet: fetching a published description at run time (needs the format agreed in modules#996).
+* `src/typecheck/module-description.ts`: the description format (version 1) and `toStub`, the mapper to a
+  Python stub; an unknown version or kind, a name that the stub uses for a type, or a stub that does not
+  check, is reported (and the program is not checked against it).
+* The checker gives the stub of each module that a program imports to pyright, once, for checks and for
+  REPL chunks. A module with no description is the error "The module X cannot be imported: its types are
+  not known to Python §4 Typed". A test runs a typed program that imports a module through the checker and
+  the py2js session.
+* `src/typecheck/modules/`: the temporary descriptions of `rune`, `curve`, `sound`, `binary_tree`, `repeat`,
+  `matrix` and `scrabble`, written by hand from the modules' declarations (their names are those of each
+  plugin's exports). They go when the modules publish their own descriptions
+  ([modules#997](https://github.com/source-academy/modules/issues/997)).
+* Not yet: fetching a published description at run time (after the first descriptions are published).
 
 ### Phase 5: language directory, documentation, release (≈ 3 days)
 
