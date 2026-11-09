@@ -125,3 +125,6 @@ src/conductor/plugins/autocomplete/builtins/*.json
 package-lock.json
 
 .DS_Store
+
+# The typed parts of the specification of Python §4 Typed (scripts/typed-spec.ts)
+docs/specs/generated/

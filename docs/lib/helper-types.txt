@@ -1,0 +1,17 @@
+# The types of the helper functions of the library sources (docs/lib/linked_list.py, stream.py), which the
+# type checker's declarations (src/typecheck/prelude.pyi) do not have: they are not predeclared names.
+def _length[A](xs: LList[A], acc: int) -> int
+def _map[A, B](f: Callable[[A], B], xs: LList[A], acc: LList[B]) -> LList[B]
+def _build_llist[A](i: int, fun: Callable[[int], A], already_built: LList[A]) -> LList[A]
+def _llist_to_string(xs: object, cont: Callable[[str], str]) -> str
+def _reverse[A](original: LList[A], reversed_acc: LList[A]) -> LList[A]
+def _append[A](xs: LList[A], ys: LList[A], cont: Callable[[LList[A]], LList[A]]) -> LList[A]
+def _remove[A](v: A, xs: LList[A], acc: LList[A]) -> LList[A]
+def _remove_all[A](v: A, xs: LList[A], acc: LList[A]) -> LList[A]
+def _enum_llist(start: int, end: int, acc: LList[int]) -> LList[int]
+def _reduce[A, B](f: Callable[[A, B], B], initial: B, xs: LList[A], cont: Callable[[B], B]) -> B
+def _filter[A](pred: Callable[[A], bool], xs: LList[A], acc: LList[A]) -> LList[A]
+# functions inside functions, with the type parameters of the function that they are in
+def build_stream.build(i: int) -> Stream[A]
+def stream_reverse.rev(original: Stream[A], reversed: Stream[A]) -> Stream[A]
+def eval_stream.es(s: Stream[A], n: int) -> LList[A]
