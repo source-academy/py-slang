@@ -275,8 +275,23 @@ describe("descriptions that make a stub that does not check", () => {
       functions: [],
       constants: [],
     };
-    expect(() => toStub({ ...base, opaqueTypes: ["int"] })).toThrow(/cannot be named int/);
+    expect(() => toStub({ ...base, opaqueTypes: ["int"] })).toThrow(
+      /int cannot be the name of a type/,
+    );
     expect(() => toStub({ ...base, opaqueTypes: ["class"] })).toThrow(/not a name for a type/);
+    // names that the stub uses for its own types: an opaque type, a type parameter, a function
+    expect(() => toStub({ ...base, opaqueTypes: ["object"] })).toThrow(
+      /object cannot be the name of a type/,
+    );
+    expect(() =>
+      toStub({
+        ...base,
+        functions: [{ name: "f", typeParameters: ["int"], params: [], returns: "integer" }],
+      }),
+    ).toThrow(/int cannot be the name of a type parameter/);
+    expect(() =>
+      toStub({ ...base, functions: [{ name: "list", params: [], returns: "void" }] }),
+    ).toThrow(/list cannot be the name of a function/);
     expect(() =>
       toStub({ ...base, functions: [{ name: "a-b", params: [], returns: "void" }] }),
     ).toThrow(/not a name for a function/);

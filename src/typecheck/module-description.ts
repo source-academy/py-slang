@@ -155,12 +155,34 @@ const KEYWORDS = new Set(
     " ",
   ),
 );
-/** The names that the stub itself uses for types: an opaque type with one of them would change what they mean. */
-const TYPE_NAMES = new Set(["int", "float", "str", "bool", "list", "Pair", "LList"]);
+/**
+ * The names that the stub itself uses for types. A name that the module declares (an opaque type, a type
+ * parameter, a function, a constant) with one of them would change what they mean in the rest of the stub:
+ * a type parameter `int` makes an `integer` parameter any type.
+ */
+const RESERVED = new Set([
+  "int",
+  "float",
+  "str",
+  "bool",
+  "list",
+  "object",
+  "None",
+  "Pair",
+  "LList",
+  "_Callable",
+  "_NoReturn",
+  "_LList",
+  "_Pair",
+]);
 
 function checkName(name: string, what: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || KEYWORDS.has(name))
     throw new UnknownDescriptionError(`${JSON.stringify(name)} is not a name for ${what}`);
+  if (RESERVED.has(name))
+    throw new UnknownDescriptionError(
+      `${name} cannot be the name of ${what}: the stub uses it for a type`,
+    );
 }
 
 /**
@@ -176,8 +198,6 @@ export function toStub(description: ModuleDescription): string {
     const { name, typeParameters } =
       typeof type === "string" ? { name: type, typeParameters: [] } : type;
     checkName(name, "a type");
-    if (TYPE_NAMES.has(name))
-      throw new UnknownDescriptionError(`the opaque type cannot be named ${name}`);
     typeParameters.forEach(parameter => checkName(parameter, "a type parameter"));
     opaque.set(name, typeParameters.length);
     // An opaque value is only received from the module and passed back to it: no program makes
