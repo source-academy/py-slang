@@ -12,7 +12,7 @@ factorial(1, 2)                                    # ERROR: Expected 1 positiona
 x: int = "hello"                                   # ERROR: Type "str" is not assignable to declared type "int"
 y = 1 + "a"                                        # ERROR: Operator "+" not supported for types "int" and "str"
 head(llist(1, 2)) + "s"                            # ERROR: Operator "+" not supported for types "int" and "str"
-head(5)                                            # ERROR: head expects p to be Pair[H, Any], but got int
+head(5)                                            # ERROR: head expects p to be Pair[H, T], but got int
 xs = llist(1, 2, 3)
 head(xs)                                           # ERROR: The value can be None: test for that first
 map(lambda x: x + 1, llist("a", "b"))              # ERROR: Operator "+" not supported for types "str" and "int"

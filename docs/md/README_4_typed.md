@@ -112,7 +112,7 @@ def square(x: int) -> int:
 square("five")           # square expects x to be int, but got str
 head(pair(1, 2)[0])      # A pair cannot be indexed (Pair[int, int]): use head(...) and tail(...)
 if 1: pass               # A condition must be a bool, but this is an int
-head(llist(1, 2))        # head expects p to be Pair[H, Any], but got LList[int]. The value can be None:
+head(llist(1, 2))        # head expects p to be Pair[H, T], but got LList[int]. The value can be None:
                          # test for that first, for example with is_none(...)
 ```
 
