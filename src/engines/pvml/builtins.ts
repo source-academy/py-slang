@@ -3,6 +3,7 @@ import { friendlyTypeName } from "../cse/types";
 import { numericCompare } from "../cse/utils";
 import { minArgMap, toPythonString } from "../../stdlib/utils";
 import { transform } from "../../stdlib/parser";
+import { nextafter, ulp } from "../../stdlib/floatSteps";
 // Imported only for their module-load side effect of populating
 // `minArgMap` (via each builtin's `@Validate` decorator, see stdlib/utils.ts)
 // — used below to build PRIMITIVE_MIN_ARGS for arity(). `../../stdlib/parser`
@@ -207,17 +208,12 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   // name in this stretch (parse/tokenize/the math_* additions above) is still browser/CSE-only, this
   // only backs py-slang's own local TS PVMLInterpreter.
   ["print_llist", 127],
-  // `math_nextafter`/`math_ulp` are themselves unimplemented stubs on the CSE
-  // side too (misc.ts/math.ts: both throw "not implemented" if actually
-  // called) — registered here only so a *bare reference* to the name (e.g.
-  // `arity(math_nextafter)`, which never calls it) compiles and reports the
-  // correct arity, exactly mirroring CSE's own `@Validate` decorator on
-  // these two. `input()` is a genuine, working CSE feature but needs real
+  // `math_nextafter`/`math_ulp` are implemented (src/stdlib/floatSteps.ts, as on the CSE side).
+  // `input()` is a genuine, working CSE feature but needs real
   // async stdin plumbing (Context.streams — see input.test.ts) this
-  // synchronous TS interpreter has no equivalent of; same reasoning applies:
-  // registered for arity() introspection only. All three throw a clear
-  // "not implemented"/"not supported" error below if ever actually called,
-  // rather than silently misdispatching.
+  // synchronous TS interpreter has no equivalent of: registered for
+  // arity() introspection only, and it throws a clear "not supported" error
+  // below if ever actually called, rather than silently misdispatching.
   ["math_nextafter", 128],
   ["math_ulp", 129],
   ["input", 130],
@@ -1351,12 +1347,29 @@ export function executePrimitive(
       drawData?.(args);
       return args[0];
 
-    case 128: // math_nextafter — see PRIMITIVE_FUNCTIONS' doc comment: an unimplemented
-      // stub on the CSE side too.
-      throw new PVMLInterpreterError("math_nextafter not implemented");
+    case 128: {
+      // math_nextafter(x, y[, steps]) — CPython's, shared with the stdlib (src/stdlib/floatSteps.ts).
+      if (args.length < 2 || args.length > 3)
+        throw new MissingRequiredPositionalError(
+          `math_nextafter() takes 2 or 3 arguments (${args.length} given)`,
+        );
+      const [x, y] = assertNumericArgs(args.slice(0, 2), "math_nextafter", variant);
+      let steps = 1n;
+      if (args.length === 3) {
+        // An int only: in PVML a float is a JS number, and 1.0 is not a number of steps.
+        if (typeof args[2] !== "bigint")
+          throw new PVMLInterpreterError(
+            `TypeError: unsupported argument type for math_nextafter: ${friendlyTypeName(getPVMLType(args[2]), variant)}`,
+          );
+        steps = args[2];
+        if (steps < 0n)
+          throw new PVMLInterpreterError("ValueError: steps must be a non-negative integer");
+      }
+      return nextafter(x, y, steps);
+    }
 
-    case 129: // math_ulp — see math_nextafter above.
-      throw new PVMLInterpreterError("math_ulp not implemented");
+    case 129: // math_ulp(x) — see math_nextafter above.
+      return unaryMath(args, "math_ulp", ulp, variant);
 
     case 130: // input — see PRIMITIVE_FUNCTIONS' doc comment: a real CSE feature this
       // synchronous interpreter has no async-stdin equivalent of.
