@@ -24,3 +24,7 @@ def apply(f: Callable[[int], int], v: int) -> int:
 apply(lambda s: s.upper(), 3)                      # ERROR: Cannot access attribute "upper" for class "int"
 set_head(pair(1, 2), "x")                          # ERROR: set_head expects v to be H, but got str
 tail(xs)[0]                                        # ERROR: cannot be indexed
+def mixed(c: bool) -> int:
+    ys = llist(1, 2) if c else llist("a")
+    zs: LList[int | str] = llist(1, 2) if c else llist("a")
+    return length(zs) + length(ys)                 # ERROR: length expects xs to be LList[A], but got LList[int] | LList[str]

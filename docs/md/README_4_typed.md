@@ -72,6 +72,13 @@ are concerned: `pair(1, 2)[0]` is a type error, and you access the head and tail
 `tail`. There is no type that stands for every type (no `Any`), and types need no import: a program that
 imports from `typing` is rejected.
 
+One limit follows from the types of pairs and lists: `head`, `tail`, `set_head`, `set_tail`, `length`,
+`print_llist`, `llist_to_string` and `stream_length` need one head type, one tail type and one element type.
+A variable that holds a pair or list of one type in one branch and of another in the other branch
+(`xs = llist(1, 2) if c else llist("a")`, of type `LList[int] | LList[str]`) is therefore rejected by them:
+`length expects xs to be LList[A], but got LList[int] | LList[str]`. Declare the variable with one type
+instead, as in `xs: LList[int | str] = llist(1, 2) if c else llist("a")`.
+
 ## Annotating your program
 
 Every function definition annotates each of its parameters and its return type; a function that does not
