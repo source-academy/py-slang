@@ -160,31 +160,6 @@ export function renderSignature(
 }
 
 /**
- * `name[A, B](f: ..., xs: ...) -> R`: the declaration with the parameter names of a listing (`names`, in order;
- * a `*` in front of a star parameter). What a program cannot write is made writable (see `writable`).
- * `shown` is the name to show (`build` for the key `build_stream.build`).
- */
-export function renderSignature(
-  key: string,
-  names: string[],
-  declaration: Declaration,
-  shown: string = key,
-): string {
-  if (names.length !== declaration.parameters.length)
-    throw new Error(
-      `${key} has ${names.length} parameters in the listing and ${declaration.parameters.length} in its declaration`,
-    );
-  const { types, added } = writable(
-    [...declaration.parameters.map(p => p.type), declaration.returns],
-    declaration.typeParameters,
-  );
-  const parameters = names.map((parameter, i) => `${parameter}: ${types[i]}`);
-  const typeParameters = [...declaration.typeParameters, ...added];
-  const generic = typeParameters.length ? `[${typeParameters.join(", ")}]` : "";
-  return `${shown}${generic}(${parameters.join(", ")}) -> ${types[types.length - 1]}`;
-}
-
-/**
  * The text of a listing with the types of its functions: every line `def name(x, y):` is given the types of
  * the declaration of `name`. A function without a declaration is an error.
  */
