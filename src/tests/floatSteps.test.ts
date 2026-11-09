@@ -14,6 +14,13 @@ describe("nextafter", () => {
     expect(nextafter(5e-324, -1, 3n)).toBe(-1e-323);
   });
 
+  test("reaching zero gives the zero of the side it comes from", () => {
+    expect(Object.is(nextafter(-5e-324, 1, 1n), -0)).toBe(true);
+    expect(Object.is(nextafter(5e-324, -1, 1n), 0)).toBe(true);
+    expect(Object.is(nextafter(-1e-323, 1, 2n), -0)).toBe(true);
+    expect(nextafter(-1e-323, 1, 3n)).toBe(5e-324);
+  });
+
   test("zero steps give x, whatever y is", () => {
     expect(nextafter(1, 2, 0n)).toBe(1);
     expect(Object.is(nextafter(-0, 1, 0n), -0)).toBe(true);

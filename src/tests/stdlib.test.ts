@@ -286,6 +286,7 @@ describe("Standard Library Tests", () => {
         ["math_nextafter(1.0, 2.0, 3)", 1.0000000000000007, null],
         ["math_nextafter(0.0, -1.0, 2)", -1e-323, null],
         ["math_nextafter(1.0, 1.0000000000000004, 5)", 1.0000000000000004, null],
+        ["math_copysign(1.0, math_nextafter(-5e-324, 1.0))", -1, null],
         ["math_nextafter(1.0, 2.0, 0)", 1, null],
         ["math_nextafter(1.0, 1.0, 4)", 1, null],
         ["math_isinf(math_nextafter(1.7976931348623157e308, math_inf, 3))", true, null],

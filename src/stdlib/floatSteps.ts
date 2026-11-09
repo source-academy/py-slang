@@ -37,7 +37,9 @@ export function nextafter(x: number, y: number, steps: bigint): number {
   const to = position(y);
   const distance = to > from ? to - from : from - to;
   if (steps >= distance) return y;
-  return fromPosition(to > from ? from + steps : from - steps);
+  const result = to > from ? from + steps : from - steps;
+  // Reaching zero from below gives -0, as in CPython (and C): the sign is that of the side it came from.
+  return result === 0n && from < 0n ? -0 : fromPosition(result);
 }
 
 /** The value of the least significant bit of `x`: the distance to the next double away from zero (NaN and infinity map to themselves). */
