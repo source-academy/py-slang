@@ -28,6 +28,15 @@ function widenLiterals(text: string): string {
   });
 }
 
+/**
+ * `Any` as the argument of a type is shown as `object`: the language has no `Any`, but the declarations of
+ * `is_pair` and `is_list` have one, because only `Any` lets the checker narrow a union (see the prelude).
+ * It is the type of what a student cannot know after `is_pair(x)` on an object, as in `LList[Any]`.
+ */
+function showAny(text: string): string {
+  return text.replace(/(?<=[[,]\s?)Any\b/g, "object");
+}
+
 /** `H@head` is `H`: the type parameter of the function, which the student knows from the documentation. */
 function dropTypeParameterScopes(text: string): string {
   return text.replace(/\b_?([A-Z][A-Za-z]*)@\w+/g, "$1");
@@ -157,6 +166,7 @@ export function studentMessage(message: string): string {
       break;
     }
   }
+  text = showAny(text);
   if (canBeNone)
     text += ". The value can be None: test for that first, for example with is_none(...)";
   return text;

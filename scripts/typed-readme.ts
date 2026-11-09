@@ -37,7 +37,9 @@ export function groupsOf(prelude: string): { title: string; lines: string[] }[] 
           // the marker of positional-only parameters is noise for a student: `(x: int, /)` is `(x: int)`
           .replace(/,\s*\/(?=\s*[,)])/g, "")
           .replace(/\(\s*\/\s*,\s*/g, "(")
-          .replace(/\b_(Any|TypeIs|NoReturn)\b/g, "$1")
+          .replace(/\b_(TypeIs|NoReturn)\b/g, "$1")
+          // the Any of the narrowing of is_pair and is_list: a program cannot write it, and nor does a student read it
+          .replace(/\b_Any\b/g, "object")
           .trimEnd(),
       );
     }

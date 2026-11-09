@@ -71,6 +71,22 @@ describe("messages for students", () => {
     );
   });
 
+  test("Any as the argument of a type is shown as object", () => {
+    expect(
+      studentMessage(
+        `Argument of type "LList[Any]" cannot be assigned to parameter "f" of type "(...) -> object" in function "arity"`,
+      ),
+    ).toBe("arity expects f to be (...) -> object, but got LList[object]");
+    expect(studentMessage(`Type "Pair[Any, Any]" is not assignable to declared type "int"`)).toBe(
+      `Type "Pair[object, object]" is not assignable to declared type "int"`,
+    );
+    expect(studentMessage(`Type "list[Any]" is not assignable to declared type "int"`)).toBe(
+      `Type "list[object]" is not assignable to declared type "int"`,
+    );
+    // The message about an Any that a student wrote is about Any, and says what to do.
+    expect(studentMessage("Type `Any` is not allowed")).toContain("The type Any is not available");
+  });
+
   test("indexing a pair", () => {
     expect(studentMessage(`"__getitem__" method not defined on type "Pair[int, int]"`)).toBe(
       "A pair cannot be indexed (Pair[int, int]): use head(...) and tail(...)",
