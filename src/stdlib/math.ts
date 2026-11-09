@@ -5,6 +5,7 @@ import { handleRuntimeError } from "../engines/cse/error";
 import { BigIntValue, BoolValue, BuiltinValue, NumberValue, Value } from "../engines/cse/stash";
 import { isNumeric } from "../engines/cse/utils";
 import { TypeError, ValueError } from "../errors";
+import { nextafter, ulp } from "./floatSteps";
 import { GroupName, minArgMap, Validate } from "./utils";
 
 const mathBuiltins = new Map<string, Value>();
@@ -889,26 +890,41 @@ export class MathBuiltins {
     return { type: "number", value: result };
   }
 
-  @Validate(2, 2, "math_nextafter", false)
+  @Validate(2, 3, "math_nextafter", true)
   static math_nextafter(
-    _args: Value[],
-    _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
-  ): Value {
-    // TODO: Implement math_nextafter using proper bit-level manipulation and handling special cases (NaN, Infinity, steps, etc.)
-    throw new Error("math_nextafter not implemented");
+    args: Value[],
+    source: string,
+    command: ExprNS.Call,
+    context: Context,
+  ): NumberValue {
+    const x = MathBuiltins._toNumber(args[0], source, command, context);
+    const y = MathBuiltins._toNumber(args[1], source, command, context);
+    let steps = 1n;
+    if (args.length === 3) {
+      const given = args[2];
+      if (given.type !== "bigint") {
+        handleRuntimeError(context, new TypeError(source, command, context, given.type));
+      } else if (given.value < 0n) {
+        // CPython: "steps must be a non-negative integer"
+        handleRuntimeError(context, new ValueError(source, command, context, "math_nextafter"));
+      } else {
+        steps = given.value;
+      }
+    }
+    return { type: "number", value: nextafter(x, y, steps) };
   }
 
   @Validate(1, 1, "math_ulp", false)
   static math_ulp(
-    _args: Value[],
-    _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
-  ): Value {
-    // TODO: Implement math_ulp to return the unit in the last place (ULP) of the given floating-point number.
-    throw new Error("math_ulp not implemented");
+    args: Value[],
+    source: string,
+    command: ExprNS.Call,
+    context: Context,
+  ): NumberValue {
+    return {
+      type: "number",
+      value: ulp(MathBuiltins._toNumber(args[0], source, command, context)),
+    };
   }
 
   @Validate(1, 1, "math_cbrt", false)

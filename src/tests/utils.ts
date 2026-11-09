@@ -1351,11 +1351,25 @@ function withoutLayout(text: string): string {
   return result;
 }
 
+/**
+ * Whether `code` calls `math_nextafter` with a third argument. This dialect documents `steps` as a
+ * positional parameter (it has no keyword arguments in §4), but CPython 3.12 and later takes it as a
+ * keyword-only argument: `math.nextafter(x, y, 3)` is a TypeError there. (The cases with `steps` are
+ * checked against CPython's results by hand: see the values in floatSteps.test.ts.)
+ */
+function isNextafterSteps(code: string): boolean {
+  return /\bmath_nextafter\([^()]*,[^()]*,/.test(code);
+}
+
 /** Reasons a test case is skipped for the CPython pathway, checked in order. */
 const CPYTHON_SKIP_REASONS: {
   matches: (code: string, expected: TestExpectedValue) => boolean;
   reason: string;
 }[] = [
+  {
+    matches: isNextafterSteps,
+    reason: "math_nextafter takes steps positionally here, but keyword-only in CPython",
+  },
   {
     matches: isBoolRejection,
     reason: "bool is an int subclass in CPython, unlike this dialect's arithmetic/numeric builtins",
