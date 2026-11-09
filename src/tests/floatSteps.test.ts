@@ -36,6 +36,11 @@ describe("nextafter", () => {
     expect(nextafter(1, NaN, 1n)).toBeNaN();
   });
 
+  test("no step gives x, even towards NaN, as in CPython", () => {
+    expect(nextafter(1, NaN, 0n)).toBe(1);
+    expect(nextafter(NaN, 1, 0n)).toBeNaN();
+  });
+
   test("gives y with the sign of y when x equals y", () => {
     expect(Object.is(nextafter(0, -0, 1n), -0)).toBe(true);
   });

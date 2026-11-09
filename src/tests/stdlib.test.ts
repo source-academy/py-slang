@@ -293,6 +293,7 @@ describe("Standard Library Tests", () => {
         ["math_nextafter(math_inf, 0.0, 2)", 1.7976931348623155e308, null],
         ["math_isnan(math_nextafter(1.0, math_nan))", true, null],
         ["math_isnan(math_nextafter(math_nan, 1.0, 0))", true, null],
+        ["math_nextafter(1.0, math_nan, 0)", 1, null],
         ["math_nextafter(1.0, 2.0, -1)", ValueError, null],
         ["math_nextafter(1.0, 2.0, 1.0)", TypeError, null],
         ["math_nextafter(True, 2.0)", TypeError, null],

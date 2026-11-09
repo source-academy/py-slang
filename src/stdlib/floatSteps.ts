@@ -29,9 +29,10 @@ function fromPosition(position: bigint): number {
  * `steps` must not be negative.
  */
 export function nextafter(x: number, y: number, steps: bigint): number {
+  // No step is no step, even towards NaN (CPython: math.nextafter(1.0, nan, steps=0) is 1.0).
+  if (steps === 0n) return x;
   if (Number.isNaN(x)) return x;
   if (Number.isNaN(y)) return y;
-  if (steps === 0n) return x;
   if (x === y) return y;
   const from = position(x);
   const to = position(y);
