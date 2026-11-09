@@ -403,6 +403,12 @@ and is **settled**; the work in the `modules` repository is [#997](https://githu
   int or a float); in an array, which is invariant, a number is `float` both ways. `integer` marks a
   parameter that must be whole (`stackn`'s `n`, the `num_points` of the drawers of `curve`): it is `int`, and
   is not allowed as a result.
+  * **Known limitation** (decided with Martin; [modules#998](https://github.com/source-academy/modules/issues/998)):
+    a type parameter keeps the type that it was given, but an `int` that passes through a generic function
+    (`BinaryTree[A]`, `repeat`) comes back as a float, so `xs[entry(t)]` passes the check and fails at run
+    time. Python types cannot say "an `int` goes in, a float comes out" for a type parameter. It is
+    documented in the specification, and the fix (if one is wanted) is in the module interface, not in the
+    descriptions.
 * **Loading**: before a chunk is checked, the evaluator fetches the description of each module that it
   imports, as it fetches the module, and gives the stubs to the checker.
 * **A module with no description cannot be imported** from a typed language (there is no `Any` to give its
