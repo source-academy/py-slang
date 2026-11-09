@@ -79,6 +79,11 @@ A variable that holds a pair or list of one type in one branch and of another in
 `length expects xs to be LList[A], but got LList[int] | LList[str]`. Declare the variable with one type
 instead, as in `xs: LList[int | str] = llist(1, 2) if c else llist("a")`.
 
+A second limit is about `object`. After `is_pair(x)` has narrowed a value of type `object`, the checker
+does not know the types in the pair: `head(x)` can be used as anything, but `tail(x)` is taken to be a
+linked list, so `arity(tail(x))` is rejected even if the tail is a function. Annotate the parameter with the
+pair type that you expect (`x: Pair[int, Callable[[], int]]`) instead of `object`.
+
 ## Annotating your program
 
 Every function definition annotates each of its parameters and its return type; a function that does not
