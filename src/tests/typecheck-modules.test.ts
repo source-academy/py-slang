@@ -247,6 +247,11 @@ describe("programs that import a module", () => {
       "from rune import animate_rune\nanimate_rune(1, 20, lambda t: t * 2)\n",
       /func|lambda|Rune/,
     ],
+    [
+      "an animation where a rune is wanted",
+      "from rune import animate_rune, scale, heart\nscale(1, animate_rune(1, 20, lambda t: heart))\n",
+      /AnimatedRune/,
+    ],
     ["a name that the module does not have", "from rune import flower\n", /flower/],
   ])("%s is an error", async (_, program, message) => {
     const found = errors(await checker.check(program));

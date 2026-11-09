@@ -23,10 +23,10 @@ export const RUNE: ModuleDescription = {
         { name: "fps", type: "number" },
         {
           name: "func",
-          type: { function: { params: ["number"], returns: { opaque: "AnimatedRune" } } },
+          type: { function: { params: ["number"], returns: { opaque: "Rune" } } },
         },
       ],
-      returns: { opaque: "Rune" },
+      returns: { opaque: "AnimatedRune" },
     },
     {
       name: "animate_rune",
@@ -35,10 +35,10 @@ export const RUNE: ModuleDescription = {
         { name: "fps", type: "number" },
         {
           name: "func",
-          type: { function: { params: ["number"], returns: { opaque: "AnimatedRune" } } },
+          type: { function: { params: ["number"], returns: { opaque: "Rune" } } },
         },
       ],
-      returns: { opaque: "Rune" },
+      returns: { opaque: "AnimatedRune" },
     },
     {
       name: "beside",
