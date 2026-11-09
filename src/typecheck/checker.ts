@@ -130,7 +130,16 @@ export class TypedPythonChecker {
       const description = this.descriptions(module);
       if (!description) continue;
       try {
-        await this.client.check(`${module}.pyi`, toStub(description));
+        // `foo.bar` is the file foo/bar.pyi, where pyright looks for it.
+        const stub = toStub(description);
+        const found = await this.client.check(`${module.replace(/\./g, "/")}.pyi`, stub);
+        // A description can make a stub that does not check (an opaque type with the name of a
+        // builtin): reject it, so that programs are not checked against a broken signature.
+        const broken = found.find(d => d.severity === 1);
+        if (broken)
+          throw new UnknownDescriptionError(
+            `its stub has an error: ${broken.message.split("\n")[0]}`,
+          );
         this.provided.add(module);
       } catch (cause) {
         if (!(cause instanceof UnknownDescriptionError)) throw cause;

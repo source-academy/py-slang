@@ -43,11 +43,11 @@ describe("the stub that a description becomes", () => {
   test("every kind of type has its Python type; the parameters are positional", () => {
     expect(toStub(description)).toBe(
       [
-        "from typing import Callable, NoReturn",
+        "from typing import Callable as _Callable, NoReturn as _NoReturn",
         "class Thing:",
-        "    def __init__(self, _never: NoReturn, /) -> None: ...",
+        "    def __init__(self, _never: _NoReturn, /) -> None: ...",
         "def make(size: float, label: str, /) -> Thing: ...",
-        "def each(f: Callable[[int], bool], xs: LList[int], /) -> Pair[list[float], None]: ...",
+        "def each(f: _Callable[[int], bool], xs: LList[int], /) -> Pair[list[float], None]: ...",
         "def now() -> int: ...",
         "origin: Thing",
         "",
@@ -59,7 +59,7 @@ describe("the stub that a description becomes", () => {
     expect(() => toStub({ ...description, version: 2 as 1 })).toThrow(UnknownDescriptionError);
     expect(() =>
       toStub({ ...description, constants: [{ name: "x", type: { set: "number" } as never }] }),
-    ).toThrow(/not supported by this version/);
+    ).toThrow(/cannot be used by this version/);
     expect(() =>
       toStub({ ...description, constants: [{ name: "x", type: { opaque: "Other" } }] }),
     ).toThrow(/Other is not declared/);
@@ -141,6 +141,81 @@ describe("a description that this version cannot read", () => {
         const [error] = errors(await checker.check("from future import x\n"));
         expect(error).toMatchObject({ line: 1 });
         expect(error.message).toMatch(/The types of the module future cannot be used: .*version 2/);
+      } finally {
+        checker.dispose();
+      }
+    },
+    CHECKER_SETUP_TIMEOUT_MS,
+  );
+});
+
+describe("descriptions that make a stub that does not check", () => {
+  const withSource = async (description: ModuleDescription) =>
+    TypedPythonChecker.start(
+      nodeWorkerFactory(await ensureTypedPython4Checker()),
+      () => description,
+    );
+
+  test("names that are not names, or that change what the stub means, are rejected by the mapper", () => {
+    const base: ModuleDescription = {
+      version: 1,
+      module: "odd",
+      opaqueTypes: [],
+      functions: [],
+      constants: [],
+    };
+    expect(() => toStub({ ...base, opaqueTypes: ["int"] })).toThrow(/cannot be named int/);
+    expect(() => toStub({ ...base, opaqueTypes: ["class"] })).toThrow(/not a name for a type/);
+    expect(() =>
+      toStub({ ...base, functions: [{ name: "a-b", params: [], returns: "void" }] }),
+    ).toThrow(/not a name for a function/);
+  });
+
+  test(
+    "a stub that has an error in it is reported, and programs are not checked against it",
+    async () => {
+      // What the mapper cannot know: a parameter that is named twice.
+      const checker = await withSource({
+        version: 1,
+        module: "odd",
+        opaqueTypes: [],
+        functions: [
+          {
+            name: "f",
+            params: [
+              { name: "x", type: "integer" },
+              { name: "x", type: "integer" },
+            ],
+            returns: "void",
+          },
+        ],
+        constants: [],
+      });
+      try {
+        const found = errors(await checker.check("from odd import f\nf(1, 2)\n"));
+        expect(found[0].message).toMatch(
+          /The types of the module odd cannot be used: .*its stub has an error/,
+        );
+      } finally {
+        checker.dispose();
+      }
+    },
+    CHECKER_SETUP_TIMEOUT_MS,
+  );
+
+  test(
+    "a module with a dotted name is found where a program imports it",
+    async () => {
+      const checker = await withSource({
+        version: 1,
+        module: "pkg.sub",
+        opaqueTypes: [],
+        functions: [{ name: "f", params: [{ name: "x", type: "integer" }], returns: "integer" }],
+        constants: [],
+      });
+      try {
+        expect(errors(await checker.check("from pkg.sub import f\nf(1)\n"))).toEqual([]);
+        expect(errors(await checker.check('from pkg.sub import f\nf("a")\n'))).toHaveLength(1);
       } finally {
         checker.dispose();
       }

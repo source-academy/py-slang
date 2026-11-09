@@ -42,7 +42,7 @@ export interface ModuleDescription {
 /** The description is of a kind that this version of py-slang does not know. */
 export class UnknownDescriptionError extends Error {
   constructor(what: string) {
-    super(`This module description is not supported by this version of py-slang: ${what}`);
+    super(`This module description cannot be used by this version of py-slang: ${what}`);
     this.name = "UnknownDescriptionError";
   }
 }
@@ -74,9 +74,22 @@ function pythonType(type: TypeDescription, opaque: ReadonlySet<string>): string 
   if ("array" in type) return `list[${pythonType(type.array, opaque)}]`;
   if ("function" in type) {
     const params = type.function.params.map(p => pythonType(p, opaque)).join(", ");
-    return `Callable[[${params}], ${pythonType(type.function.returns, opaque)}]`;
+    return `_Callable[[${params}], ${pythonType(type.function.returns, opaque)}]`;
   }
   throw new UnknownDescriptionError(`the type ${JSON.stringify(type)}`);
+}
+
+const KEYWORDS = new Set(
+  "False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield".split(
+    " ",
+  ),
+);
+/** The names that the stub itself uses for types: an opaque type with one of them would change what they mean. */
+const TYPE_NAMES = new Set(["int", "float", "str", "bool", "list", "Pair", "LList"]);
+
+function checkName(name: string, what: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || KEYWORDS.has(name))
+    throw new UnknownDescriptionError(`${JSON.stringify(name)} is not a name for ${what}`);
 }
 
 /**
@@ -87,12 +100,22 @@ export function toStub(description: ModuleDescription): string {
   if (description.version !== MODULE_DESCRIPTION_VERSION)
     throw new UnknownDescriptionError(`version ${String(description.version)}`);
   const opaque = new Set(description.opaqueTypes);
+  for (const name of description.opaqueTypes) {
+    checkName(name, "a type");
+    if (TYPE_NAMES.has(name))
+      throw new UnknownDescriptionError(`the opaque type cannot be named ${name}`);
+  }
+  for (const { name, params } of description.functions) {
+    checkName(name, "a function");
+    for (const parameter of params) checkName(parameter.name, "a parameter");
+  }
+  for (const { name } of description.constants) checkName(name, "a constant");
   const lines = [
-    "from typing import Callable, NoReturn",
+    "from typing import Callable as _Callable, NoReturn as _NoReturn",
     // An opaque value is only received from the module and passed back to it: no program makes
     // one. The constructor takes an argument that no value has, so `Rune()` and `Rune(x)` are errors.
     ...description.opaqueTypes.map(
-      name => `class ${name}:\n    def __init__(self, _never: NoReturn, /) -> None: ...`,
+      name => `class ${name}:\n    def __init__(self, _never: _NoReturn, /) -> None: ...`,
     ),
   ];
   for (const { name, params, returns } of description.functions) {
