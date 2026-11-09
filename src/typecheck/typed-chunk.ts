@@ -19,6 +19,31 @@ export interface ChunkChecker {
 }
 
 /**
+ * Erases the types of a program that the checker accepted, and rejects the use as a value of a name that
+ * is only a type (`print(Rune)` after `from rune import Rune`): it is left out of the program that runs.
+ */
+function erase(program: StmtNS.Stmt, checker: ChunkChecker): void {
+  const uses: TypeDiagnostic[] = [];
+  eraseTypes(
+    program,
+    module => checker.typeNames?.(module),
+    name => {
+      const message = `${name.lexeme} is a type: use it to annotate, not as a value`;
+      uses.push({
+        severity: "error",
+        message,
+        original: message,
+        line: name.line,
+        column: name.col,
+        endLine: name.line,
+        endColumn: name.col + name.lexeme.length,
+      });
+    },
+  );
+  rejectErrors(uses);
+}
+
+/**
  * Python §4 Typed rules on the annotations (`makeTypedChapter4Validators`): the first violation
  * is thrown. The program is not changed.
  */
@@ -57,7 +82,7 @@ export async function checkTypedChunk(
   validateTypedProgram(program);
   const proposed = await checker.proposeChunk(source);
   rejectErrors(proposed.diagnostics);
-  eraseTypes(program, module => checker.typeNames?.(module));
+  erase(program, checker);
   return proposed.accept;
 }
 
@@ -72,5 +97,5 @@ export async function checkTypedProgram(
 ): Promise<void> {
   validateTypedProgram(program);
   rejectErrors(await checker.check(source));
-  eraseTypes(program, module => checker.typeNames?.(module));
+  erase(program, checker);
 }

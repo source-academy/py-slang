@@ -1,4 +1,5 @@
 import { ExprNS, StmtNS } from "../ast-types";
+import type { Token } from "../tokenizer";
 import { ASTNode, traverseAST } from "../validator";
 
 /**
@@ -23,6 +24,12 @@ export function eraseTypes<T extends ASTNode>(
   program: T,
   /** The names that a module defines only as types: `rune` has `Rune`. */
   typeNames: (module: string) => ReadonlySet<string> | undefined = () => undefined,
+  /**
+   * Called with the token of each use, as a value, of a name that is imported only as a type
+   * (`print(Rune)`): such a name is not bound in the program that runs. (An annotation is not a
+   * use: it is erased first.)
+   */
+  onValueUse?: (name: Token) => void,
 ): T {
   // The arrays of statements to rewrite, found first: replacing statements while the tree is walked
   // would have the walk visit the new ones.
@@ -40,6 +47,7 @@ export function eraseTypes<T extends ASTNode>(
     } else if (node instanceof StmtNS.While || node instanceof StmtNS.For) bodies.push(node.body);
     else if (node instanceof ExprNS.MultiLambda) bodies.push(node.body);
   });
+  const typeImports = new Set<string>();
   for (const body of bodies) {
     body.forEach((stmt, i) => {
       if (stmt instanceof StmtNS.AnnAssign) {
@@ -49,9 +57,16 @@ export function eraseTypes<T extends ASTNode>(
       } else if (stmt instanceof StmtNS.FromImport && stmt.level === 0) {
         const types = typeNames(stmt.module.lexeme);
         if (!types) return;
+        for (const { name } of stmt.names) if (types.has(name.lexeme)) typeImports.add(name.lexeme);
         stmt.names = stmt.names.filter(({ name }) => !types.has(name.lexeme));
         if (stmt.names.length === 0) body[i] = new StmtNS.Pass(stmt.startToken, stmt.endToken);
       }
+    });
+  }
+  if (onValueUse && typeImports.size > 0) {
+    traverseAST(program, node => {
+      if (node instanceof ExprNS.Variable && typeImports.has(node.name.lexeme))
+        onValueUse(node.name);
     });
   }
   return program;

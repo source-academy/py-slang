@@ -101,6 +101,20 @@ test("a program imports the type of a module to annotate with it, and runs altho
   expect(outputs).toEqual(["True"]);
 });
 
+test("a type that is imported only as a type cannot be used as a value", async () => {
+  const { session, outputs } = await setUp();
+  const error = await session
+    .runChunk("from rune import heart, Rune\nprint('before')\nprint(Rune)\n")
+    .catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(StaticTypeErrors);
+  const [first] = (error as StaticTypeErrors).errors;
+  expect(first).toMatchObject({
+    message: "Rune is a type: use it to annotate, not as a value",
+    line: 3,
+  });
+  expect(outputs).toEqual([]);
+});
+
 describe("the names that a program imports only as types", () => {
   const erased = (source: string) =>
     eraseTypes(parse(source), () => new Set(["Rune"])).statements[0];
