@@ -506,3 +506,70 @@ describe("whole numbers and numbers in programs that use a module", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("the temporary descriptions of repeat, matrix and scrabble", () => {
+  let checker: TypedPythonChecker;
+  beforeAll(async () => {
+    checker = await startTypedChecker();
+  }, CHECKER_SETUP_TIMEOUT_MS);
+  afterAll(() => checker.dispose());
+
+  const accepted = async (program: string) => errors(await checker.check(program));
+
+  test("repeat: the function and its argument have the same type, which is checked", async () => {
+    expect(
+      await accepted(
+        "from repeat import repeat, repeat_apply, twice, thrice\n" +
+          "def plus_two(x: int) -> int:\n    return x + 2\n" +
+          "a: int = repeat(plus_two, 5)(0)\n" +
+          "b: int = twice(plus_two)(1) + thrice(plus_two)(1)\n" +
+          "c: int = repeat_apply(plus_two, 3, 10)\n",
+      ),
+    ).toEqual([]);
+  });
+
+  test.each([
+    [
+      "a count that is not whole",
+      "from repeat import repeat\ndef f(x: int) -> int:\n    return x\nrepeat(f, 2.5)\n",
+    ],
+    [
+      "a function that changes the type",
+      "from repeat import twice\ndef f(x: int) -> str:\n    return 'a'\ntwice(f)\n",
+    ],
+    [
+      "a start value of another type",
+      "from repeat import repeat_apply\ndef f(x: int) -> int:\n    return x\nrepeat_apply(f, 2, 'a')\n",
+    ],
+  ])("repeat: %s is an error", async (_, program) => {
+    expect((await accepted(program)).length).toBeGreaterThan(0);
+  });
+
+  test("matrix: the matrix is a linked list of linked lists of booleans", async () => {
+    expect(
+      await accepted(
+        "from matrix import get_matrix, clear_matrix\n" +
+          "rows = get_matrix()\n" +
+          "first: LList[bool] = head(rows) if is_pair(rows) else None\n" +
+          "clear_matrix()\n",
+      ),
+    ).toEqual([]);
+    expect(
+      (await accepted("from matrix import get_matrix\nn: int = get_matrix()\n")).length,
+    ).toBeGreaterThan(0);
+  });
+
+  test("scrabble: the words are an array of strings, and the letters an array of arrays", async () => {
+    expect(
+      await accepted(
+        "from scrabble import scrabble_words, scrabble_letters_tiny\n" +
+          "w: str = scrabble_words[0]\n" +
+          "l: str = scrabble_letters_tiny[0][0]\n" +
+          "n: int = len(scrabble_words)\n",
+      ),
+    ).toEqual([]);
+    expect(
+      (await accepted("from scrabble import scrabble_words\nn: int = scrabble_words[0]\n")).length,
+    ).toBeGreaterThan(0);
+  });
+});
