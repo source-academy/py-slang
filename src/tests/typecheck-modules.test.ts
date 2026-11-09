@@ -44,15 +44,59 @@ describe("the stub that a description becomes", () => {
     expect(toStub(description)).toBe(
       [
         "from typing import Callable as _Callable, NoReturn as _NoReturn",
+        "from __builtins__ import LList as _LList, Pair as _Pair",
         "class Thing:",
         "    def __init__(self, _never: _NoReturn, /) -> None: ...",
         "def make(size: float, label: str, /) -> Thing: ...",
-        "def each(f: _Callable[[int], bool], xs: LList[int], /) -> Pair[list[float], None]: ...",
+        "def each(f: _Callable[[int], bool], xs: _LList[int], /) -> _Pair[list[float], None]: ...",
         "def now() -> int: ...",
         "origin: Thing",
         "",
       ].join("\n"),
     );
+  });
+
+  test("an opaque type with type parameters, a type parameter, and a value of any type", () => {
+    const stub = toStub({
+      version: 1,
+      module: "box",
+      opaqueTypes: [{ name: "Box", typeParameters: ["A"] }],
+      functions: [
+        {
+          name: "wrap",
+          typeParameters: ["A"],
+          params: [{ name: "x", type: { parameter: "A" } }],
+          returns: { opaque: "Box", arguments: [{ parameter: "A" }] },
+        },
+        { name: "is_box", params: [{ name: "x", type: "any" }], returns: "boolean" },
+      ],
+      constants: [],
+    });
+    expect(stub).toContain("class Box[A]:\n    type_parameter_A: A\n");
+    expect(stub).toContain("def wrap[A](x: A, /) -> Box[A]: ...");
+    expect(stub).toContain("def is_box(x: object, /) -> bool: ...");
+  });
+
+  test("a type parameter that is not declared, or an opaque type with the wrong number of them", () => {
+    const base: ModuleDescription = {
+      version: 1,
+      module: "box",
+      opaqueTypes: [{ name: "Box", typeParameters: ["A"] }],
+      functions: [],
+      constants: [],
+    };
+    expect(() =>
+      toStub({
+        ...base,
+        functions: [{ name: "f", params: [], returns: { parameter: "A" } }],
+      }),
+    ).toThrow(/type parameter A is not declared/);
+    expect(() =>
+      toStub({
+        ...base,
+        functions: [{ name: "f", params: [], returns: { opaque: "Box" } }],
+      }),
+    ).toThrow(/Box has 1 type parameters, not 0/);
   });
 
   test("what this version does not know is rejected, not guessed", () => {
@@ -242,4 +286,100 @@ describe("descriptions that make a stub that does not check", () => {
     },
     CHECKER_SETUP_TIMEOUT_MS,
   );
+});
+
+describe("the temporary descriptions of curve, sound and binary_tree", () => {
+  let checker: TypedPythonChecker;
+  beforeAll(async () => {
+    checker = await startTypedChecker();
+  }, CHECKER_SETUP_TIMEOUT_MS);
+  afterAll(() => checker.dispose());
+
+  const accepted = async (program: string) => errors(await checker.check(program));
+
+  test("curve: curves are functions, and are combined, transformed and drawn", async () => {
+    expect(
+      await accepted(
+        "from curve import unit_circle, connect_ends, translate, scale_proportional, draw_connected, unit_line, make_point, x_of, animate_curve, put_in_standard_position\n" +
+          "c = connect_ends(unit_circle, translate(1, 0, 0)(unit_line))\n" +
+          "draw_connected(200)(scale_proportional(0.5)(put_in_standard_position(c)))\n" +
+          "x_of(unit_circle(0.5))\n" +
+          "animate_curve(1, 20, draw_connected(100), lambda t: translate(t, 0, 0)(unit_circle))\n",
+      ),
+    ).toEqual([]);
+  });
+
+  test.each([
+    ["a number where a curve is wanted", "from curve import invert\ninvert(3)\n"],
+    [
+      "a point where a curve is wanted",
+      "from curve import invert, make_point\ninvert(make_point(1, 2))\n",
+    ],
+    ["a curve where a point is wanted", "from curve import x_of, unit_circle\nx_of(unit_circle)\n"],
+    [
+      "an animation function that returns a point",
+      "from curve import animate_curve, draw_connected, unit_circle\nanimate_curve(1, 20, draw_connected(10), lambda t: unit_circle(t))\n",
+    ],
+  ])("curve: %s is an error", async (_, program) => {
+    expect((await accepted(program)).length).toBeGreaterThan(0);
+  });
+
+  test("sound: sounds are made, combined, transformed and played; recordings are functions", async () => {
+    expect(
+      await accepted(
+        "from sound import sine_sound, square_sound, consecutively, simultaneously, adsr, stacking_adsr, play, make_sound, get_duration, record_for, pan, bell\n" +
+          "s = consecutively(llist(sine_sound(440, 1), square_sound(220, 2)))\n" +
+          "play(adsr(0.1, 0.2, 0.5, 0.2)(simultaneously(llist(s, bell(60, 1)))))\n" +
+          "play(pan(0.5)(make_sound(lambda t: math_sin(t * 440), 2)))\n" +
+          "stacking_adsr(sine_sound, 300, 5, llist(adsr(0.1, 0.3, 0.2, 0.5)))\n" +
+          "d: float = get_duration(s)\n" +
+          "play(record_for(1, 0.5)())\n",
+      ),
+    ).toEqual([]);
+  });
+
+  test.each([
+    ["a wave where a sound is wanted", "from sound import play, sine_wave\nplay(sine_wave(440))\n"],
+    [
+      "a list of numbers of sounds",
+      "from sound import consecutively\nconsecutively(llist(1, 2))\n",
+    ],
+    [
+      "a wave that returns a string",
+      "from sound import make_sound\nmake_sound(lambda t: 'a', 1)\n",
+    ],
+    ["a sound used as a pair", "from sound import sine_sound\nhead(sine_sound(440, 1))\n"],
+    ["an envelope applied to a number", "from sound import adsr\nadsr(0.1, 0.2, 0.5, 0.2)(3)\n"],
+  ])("sound: %s is an error", async (_, program) => {
+    expect((await accepted(program)).length).toBeGreaterThan(0);
+  });
+
+  test("binary_tree: a tree has the type of its entries, which is checked", async () => {
+    expect(
+      await accepted(
+        "from binary_tree import make_tree, make_empty_tree, entry, left_branch, is_empty_tree, is_tree\n" +
+          "t = make_tree(1, make_tree(2, make_empty_tree(), make_empty_tree()), make_empty_tree())\n" +
+          "x: int = entry(left_branch(t))\n" +
+          "b: bool = is_empty_tree(5) or is_tree(t)\n",
+      ),
+    ).toEqual([]);
+  });
+
+  test.each([
+    [
+      "an entry of the wrong type",
+      "from binary_tree import make_tree, make_empty_tree, entry\nt = make_tree(1, make_empty_tree(), make_empty_tree())\ns: str = entry(t)\n",
+    ],
+    [
+      "a subtree with another type of entries",
+      "from binary_tree import make_tree, make_empty_tree\na = make_tree(1, make_empty_tree(), make_empty_tree())\nb = make_tree('a', make_empty_tree(), make_empty_tree())\nmake_tree(2, a, b)\n",
+    ],
+    ["a number where a tree is wanted", "from binary_tree import entry\nentry(3)\n"],
+    [
+      "a tree that is taken apart as a pair",
+      "from binary_tree import make_tree, make_empty_tree\nhead(make_tree(1, make_empty_tree(), make_empty_tree()))\n",
+    ],
+  ])("binary_tree: %s is an error", async (_, program) => {
+    expect((await accepted(program)).length).toBeGreaterThan(0);
+  });
 });

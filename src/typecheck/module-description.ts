@@ -16,8 +16,15 @@ export type TypeDescription =
   | "string"
   | "boolean"
   | "void"
-  /** A value that the module defines and that a program can only pass back to it, by the name of its type. */
-  | { opaque: string }
+  /** A value of any type, which the function inspects (`is_tree`): `object`, which a program can only pass on. */
+  | "any"
+  /**
+   * A value that the module defines and that a program can only pass back to it, by the name of its
+   * type; with the types that it is applied to, if the type has type parameters (`BinaryTree[A]`).
+   */
+  | { opaque: string; arguments?: TypeDescription[] }
+  /** A type parameter of the function that this type is a part of (`A` in `entry[A]`). */
+  | { parameter: string }
   /** A linked list, a pair, an array (a Python list), and a function: with the types of their parts. */
   | { list: TypeDescription }
   | { pair: [TypeDescription, TypeDescription] }
@@ -29,13 +36,27 @@ export interface ParameterDescription {
   type: TypeDescription;
 }
 
+/** An opaque type that has type parameters: a tree of entries of type `A`, a `BinaryTree[A]`. */
+export interface GenericOpaqueType {
+  name: string;
+  typeParameters: string[];
+}
+
+export interface FunctionDescription {
+  name: string;
+  /** The type parameters of a function that works for several types (`make_tree[A]`). */
+  typeParameters?: string[];
+  params: ParameterDescription[];
+  returns: TypeDescription;
+}
+
 export interface ModuleDescription {
   version: typeof MODULE_DESCRIPTION_VERSION;
   /** The name that a program imports: `rune`. */
   module: string;
-  /** The names of the opaque types that the module defines (`Rune`). */
-  opaqueTypes: string[];
-  functions: { name: string; params: ParameterDescription[]; returns: TypeDescription }[];
+  /** The opaque types that the module defines: a name (`Rune`), or a name with type parameters. */
+  opaqueTypes: (string | GenericOpaqueType)[];
+  functions: FunctionDescription[];
   constants: { name: string; type: TypeDescription }[];
 }
 
@@ -47,7 +68,13 @@ export class UnknownDescriptionError extends Error {
   }
 }
 
-function pythonType(type: TypeDescription, opaque: ReadonlySet<string>): string {
+/** What a type may refer to: the opaque types (with their number of type parameters), and the type parameters in scope. */
+interface Scope {
+  opaque: ReadonlyMap<string, number>;
+  parameters: ReadonlySet<string>;
+}
+
+function pythonType(type: TypeDescription, scope: Scope): string {
   if (typeof type === "string") {
     switch (type) {
       case "number":
@@ -60,21 +87,36 @@ function pythonType(type: TypeDescription, opaque: ReadonlySet<string>): string 
         return "bool";
       case "void":
         return "None";
+      case "any":
+        return "object";
     }
     throw new UnknownDescriptionError(`the type "${String(type)}"`);
   }
   if ("opaque" in type) {
-    if (!opaque.has(type.opaque))
+    const arity = scope.opaque.get(type.opaque);
+    if (arity === undefined)
       throw new UnknownDescriptionError(`the opaque type ${type.opaque} is not declared`);
-    return type.opaque;
+    const given = type.arguments ?? [];
+    if (given.length !== arity)
+      throw new UnknownDescriptionError(
+        `the opaque type ${type.opaque} has ${arity} type parameters, not ${given.length}`,
+      );
+    return arity === 0
+      ? type.opaque
+      : `${type.opaque}[${given.map(t => pythonType(t, scope)).join(", ")}]`;
   }
-  if ("list" in type) return `LList[${pythonType(type.list, opaque)}]`;
+  if ("parameter" in type) {
+    if (!scope.parameters.has(type.parameter))
+      throw new UnknownDescriptionError(`the type parameter ${type.parameter} is not declared`);
+    return type.parameter;
+  }
+  if ("list" in type) return `_LList[${pythonType(type.list, scope)}]`;
   if ("pair" in type)
-    return `Pair[${pythonType(type.pair[0], opaque)}, ${pythonType(type.pair[1], opaque)}]`;
-  if ("array" in type) return `list[${pythonType(type.array, opaque)}]`;
+    return `_Pair[${pythonType(type.pair[0], scope)}, ${pythonType(type.pair[1], scope)}]`;
+  if ("array" in type) return `list[${pythonType(type.array, scope)}]`;
   if ("function" in type) {
-    const params = type.function.params.map(p => pythonType(p, opaque)).join(", ");
-    return `_Callable[[${params}], ${pythonType(type.function.returns, opaque)}]`;
+    const params = type.function.params.map(p => pythonType(p, scope)).join(", ");
+    return `_Callable[[${params}], ${pythonType(type.function.returns, scope)}]`;
   }
   throw new UnknownDescriptionError(`the type ${JSON.stringify(type)}`);
 }
@@ -99,31 +141,49 @@ function checkName(name: string, what: string): void {
 export function toStub(description: ModuleDescription): string {
   if (description.version !== MODULE_DESCRIPTION_VERSION)
     throw new UnknownDescriptionError(`version ${String(description.version)}`);
-  const opaque = new Set(description.opaqueTypes);
-  for (const name of description.opaqueTypes) {
+  const opaque = new Map<string, number>();
+  const classes: string[] = [];
+  for (const type of description.opaqueTypes) {
+    const { name, typeParameters } =
+      typeof type === "string" ? { name: type, typeParameters: [] } : type;
     checkName(name, "a type");
     if (TYPE_NAMES.has(name))
       throw new UnknownDescriptionError(`the opaque type cannot be named ${name}`);
+    typeParameters.forEach(parameter => checkName(parameter, "a type parameter"));
+    opaque.set(name, typeParameters.length);
+    // An opaque value is only received from the module and passed back to it: no program makes
+    // one. The constructor takes an argument that no value has, so `Rune()` and `Rune(x)` are errors.
+    // A type parameter is used by a member, so that it is invariant: a `BinaryTree[int]` is not a
+    // `BinaryTree[str]` (a parameter that nothing uses would accept either). Not a private name:
+    // pyright leaves those out when it works out the variance.
+    classes.push(
+      `class ${name}${typeParameters.length ? `[${typeParameters.join(", ")}]` : ""}:`,
+      ...typeParameters.map(parameter => `    type_parameter_${parameter}: ${parameter}`),
+      "    def __init__(self, _never: _NoReturn, /) -> None: ...",
+    );
   }
-  for (const { name, params } of description.functions) {
+  for (const { name, params, typeParameters } of description.functions) {
     checkName(name, "a function");
     for (const parameter of params) checkName(parameter.name, "a parameter");
+    for (const parameter of typeParameters ?? []) checkName(parameter, "a type parameter");
   }
   for (const { name } of description.constants) checkName(name, "a constant");
   const lines = [
     "from typing import Callable as _Callable, NoReturn as _NoReturn",
-    // An opaque value is only received from the module and passed back to it: no program makes
-    // one. The constructor takes an argument that no value has, so `Rune()` and `Rune(x)` are errors.
-    ...description.opaqueTypes.map(
-      name => `class ${name}:\n    def __init__(self, _never: _NoReturn, /) -> None: ...`,
-    ),
+    // The names of the prelude (Pair, LList) are the builtins of a program, but a stub must import them.
+    "from __builtins__ import LList as _LList, Pair as _Pair",
+    ...classes,
   ];
-  for (const { name, params, returns } of description.functions) {
-    const parameters = params.map(p => `${p.name}: ${pythonType(p.type, opaque)}`);
+  for (const { name, params, returns, typeParameters = [] } of description.functions) {
+    const scope = { opaque, parameters: new Set(typeParameters) };
+    const parameters = params.map(p => `${p.name}: ${pythonType(p.type, scope)}`);
     if (parameters.length > 0) parameters.push("/");
-    lines.push(`def ${name}(${parameters.join(", ")}) -> ${pythonType(returns, opaque)}: ...`);
+    const generic = typeParameters.length ? `[${typeParameters.join(", ")}]` : "";
+    lines.push(
+      `def ${name}${generic}(${parameters.join(", ")}) -> ${pythonType(returns, scope)}: ...`,
+    );
   }
   for (const { name, type } of description.constants)
-    lines.push(`${name}: ${pythonType(type, opaque)}`);
+    lines.push(`${name}: ${pythonType(type, { opaque, parameters: new Set() })}`);
   return lines.join("\n") + "\n";
 }

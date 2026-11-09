@@ -381,8 +381,13 @@ names a type.
 * The checker gives the stub of each module that a program imports (`from rune import show`) to pyright as
   `rune.pyi`, once, for checks and for REPL chunks. A module with no description is the error "The module
   X cannot be imported: its types are not known to Python §4 Typed".
-* `src/typecheck/modules/`: the temporary description of `rune`. `curve`, `sound` and `binary_tree` follow,
-  and all of them go when the modules publish their own descriptions (modules#996).
+* `src/typecheck/modules/`: the temporary descriptions of `rune`, `curve`, `sound` and `binary_tree`,
+  written by hand from the modules' declarations (the names are those of each plugin's `exportedNames`).
+  The format has what they needed: opaque types (`Point`, `Sound`), function types (a curve is a function
+  from a number to a point; a wave, from a number to a number), `any` for a value that a function only
+  inspects (`is_tree`), and type parameters for a generic opaque type and its functions
+  (`BinaryTree[A]`, `entry[A]`). All of them go when the modules publish their own descriptions
+  (modules#996).
 * Not yet: fetching a published description at run time (needs the format agreed in modules#996).
 
 ### Phase 5: language directory, documentation, release (≈ 3 days)
