@@ -10,10 +10,19 @@ HELPERS = typing_front typing_middle_12 typing_middle_34 typing_back typing_tail
 
 HELPERSTEX = $(HELPERS:%=python_%.tex)
 
+# The typed parts of the specification of Python §4 Typed, generated from the type checker's declarations
+GENERATED = generated/linked_list_typed.py generated/stream_typed.py generated/python_typed_names.tex
+
 all: $(PDFSPECS)
+
+$(GENERATED): ../../scripts/typed-spec.ts ../../scripts/typed-readme.ts ../../src/typecheck/prelude.pyi \
+		../lib/linked_list.py ../lib/stream.py ../lib/helper-types.txt
+	cd ../.. && yarn tsx scripts/typed-spec.ts
+
+python_4_typed.pdf: $(GENERATED)
 
 %.pdf: %.tex $(HELPERSTEX)
 	$(PDFLATEX) $*
 
 clean:
-	rm -f *~ *.dvi *.aux *.log *.ps *.out *.pdf *.fdb_latexmk *.fls
+	rm -rf *~ *.dvi *.aux *.log *.ps *.out *.pdf *.fdb_latexmk *.fls generated
