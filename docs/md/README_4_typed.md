@@ -5,31 +5,35 @@ occurs. Like <a href="../python_4/">Python §4</a>, it is designed for the fourt
 <a href="https://sourceacademy.org/sicpy">Structure and Interpretation
 of Computer Programs, Python Adaptation</a> (SICPy).
 
+The definitive description of the language is the PDF
+<a href="../python_4_typed.pdf"><strong>Specification of Python §4 Typed</strong></a>: the grammar, the type
+rules and the libraries with their types.
+
 ## What names are predeclared in Python §4 Typed?
 
 On the right, you see all predeclared names of Python §4, in alphabetical order. Click on a
-name to see how it is defined and used. They come in these groups:
+name to see its type, and how it is defined and used. They come in these groups:
   <ul>
     <li>
-      <a href="../MISC/index.html">MISC</a>: Miscellaneous constants and functions
+      <a href="../MISC_typed/index.html">MISC</a>: Miscellaneous constants and functions
     </li>
     <li>
-      <a href="../MATH/index.html">MATH</a>: Mathematical constants and functions
+      <a href="../MATH_typed/index.html">MATH</a>: Mathematical constants and functions
     </li>
     <li>
-      <a href="../LINKED LIST/index.html">LINKED LIST</a>: Support for linked lists
+      <a href="../LINKED LIST_typed/index.html">LINKED LIST</a>: Support for linked lists
     </li>
     <li>
-      <a href="../PAIR MUTATOR/index.html">PAIR MUTATOR</a>: Mutating pairs
+      <a href="../PAIR MUTATOR_typed/index.html">PAIR MUTATOR</a>: Mutating pairs
     </li>
     <li>
-      <a href="../LIST/index.html">LIST</a>: Support for lists
+      <a href="../LIST_typed/index.html">LIST</a>: Support for lists
     </li>
     <li>
-      <a href="../STREAM/index.html">STREAM</a>: Support for streams
+      <a href="../STREAM_typed/index.html">STREAM</a>: Support for streams
     </li>
     <li>
-      <a href="../MCE/index.html">MCE</a>: Support for the meta-circular evaluator
+      <a href="../MCE_typed/index.html">MCE</a>: Support for the meta-circular evaluator
     </li>
   </ul>
 

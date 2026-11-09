@@ -39,6 +39,7 @@
     params.hasAttributes = false;
     params.hasDefault = false;
     params.hasName = false;
+    params.hasType = false;
 
     params.forEach(function(param) {
         if (!param) { return; }
@@ -49,6 +50,10 @@
 
         if (param.name) {
             params.hasName = true;
+        }
+
+        if (param.type && param.type.names) {
+            params.hasType = true;
         }
 
         if (typeof param.defaultvalue !== 'undefined') {
@@ -64,7 +69,9 @@
         <th>Name</th>
         <?js } ?>
 
+        <?js if (params.hasType) {?>
         <th>Type</th>
+        <?js } ?>
 
         <?js if (params.hasAttributes) {?>
         <th>Attributes</th>
@@ -90,11 +97,13 @@
                 <td class="name"><code><?js= param.name ?></code></td>
             <?js } ?>
 
+            <?js if (params.hasType) {?>
             <td class="type">
             <?js if (param.type && param.type.names) {?>
                 <?js= self.partial('type.tmpl', param.type.names) ?>
             <?js } ?>
             </td>
+            <?js } ?>
 
             <?js if (params.hasAttributes) {?>
                 <td class="attributes">
