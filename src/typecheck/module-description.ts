@@ -88,8 +88,8 @@ const turned = (direction: Direction): Direction => (direction === "in" ? "out" 
  * becomes a JS number, a module's number comes back as a float, and integers are not part of the module
  * interface. So `number` is `int | float` going in (as the prelude's `math_*` are), and `float` coming out;
  * `integer` marks a parameter that must be whole, and is `int` going in. It is not a result: a result
- * comes back as a float. In an array, which is invariant, a number is `float` both ways: an array that a
- * module returns can be passed back to it.
+ * comes back as a float. In an array and in the arguments of an opaque type, which are invariant, a number
+ * is `float` both ways: a value that a module returns can be passed back to it.
  */
 function pythonType(
   type: TypeDescription,
@@ -130,7 +130,7 @@ function pythonType(
       );
     return arity === 0
       ? type.opaque
-      : `${type.opaque}[${given.map(t => pythonType(t, scope, direction, exact)).join(", ")}]`;
+      : `${type.opaque}[${given.map(t => pythonType(t, scope, direction, true)).join(", ")}]`;
   }
   if ("parameter" in type) {
     if (!scope.parameters.has(type.parameter))

@@ -5,6 +5,7 @@ import {
   TypedPythonChecker,
   UnknownDescriptionError,
   type ModuleDescription,
+  type TypeDescription,
   type TypeDiagnostic,
 } from "../typecheck";
 import { CHECKER_SETUP_TIMEOUT_MS, startTypedChecker } from "./typecheck-harness";
@@ -138,6 +139,22 @@ describe("the stub that a description becomes", () => {
       constants: [],
     });
     expect(stub).toContain("def twice(xs: list[float], /) -> list[float]: ...");
+  });
+
+  test("the argument of an opaque type is the same going in and coming out, as the type is invariant", () => {
+    const box = (type: TypeDescription): TypeDescription => ({ opaque: "Box", arguments: [type] });
+    const stub = toStub({
+      version: 1,
+      module: "boxes",
+      opaqueTypes: [{ name: "Box", typeParameters: ["A"] }],
+      functions: [
+        { name: "make", params: [], returns: box("number") },
+        { name: "use", params: [{ name: "b", type: box("number") }], returns: "void" },
+      ],
+      constants: [],
+    });
+    expect(stub).toContain("def make() -> Box[float]: ...");
+    expect(stub).toContain("def use(b: Box[float], /) -> None: ...");
   });
 
   test("an integer is for a parameter: a result comes back as a float", () => {
@@ -389,17 +406,26 @@ describe("the temporary descriptions of curve, sound and binary_tree", () => {
   test("curve: curves are functions, and are combined, transformed and drawn", async () => {
     expect(
       await accepted(
-        "from curve import unit_circle, connect_ends, translate, scale_proportional, draw_connected, unit_line, make_point, x_of, animate_curve, put_in_standard_position\n" +
+        "from curve import animate_3D_curve, draw_3D_connected, unit_circle, connect_ends, translate, scale_proportional, draw_connected, unit_line, make_point, x_of, animate_curve, put_in_standard_position\n" +
           "c = connect_ends(unit_circle, translate(1, 0, 0)(unit_line))\n" +
           "draw_connected(200)(scale_proportional(0.5)(put_in_standard_position(c)))\n" +
           "x_of(unit_circle(0.5))\n" +
-          "animate_curve(1, 20, draw_connected(100), lambda t: translate(t, 0, 0)(unit_circle))\n",
+          "animate_curve(1, 20, draw_connected(100), lambda t: translate(t, 0, 0)(unit_circle))\n" +
+          "animate_3D_curve(1, 20, draw_3D_connected(100), lambda t: translate(t, 0, 0)(unit_circle))\n",
       ),
     ).toEqual([]);
   });
 
   test.each([
     ["a number where a curve is wanted", "from curve import invert\ninvert(3)\n"],
+    [
+      "a 3D drawer for animate_curve",
+      "from curve import animate_curve, draw_3D_connected, unit_circle\nanimate_curve(1, 20, draw_3D_connected(10), lambda t: unit_circle)\n",
+    ],
+    [
+      "a 2D drawer for animate_3D_curve",
+      "from curve import animate_3D_curve, draw_connected, unit_circle\nanimate_3D_curve(1, 20, draw_connected(10), lambda t: unit_circle)\n",
+    ],
     [
       "a point where a curve is wanted",
       "from curve import invert, make_point\ninvert(make_point(1, 2))\n",

@@ -1,4 +1,4 @@
-import type { ModuleDescription } from "../module-description";
+import type { ModuleDescription, TypeDescription } from "../module-description";
 import { fn, fun, opaque } from "./helpers";
 
 const Point = opaque("Point");
@@ -6,8 +6,13 @@ const Point = opaque("Point");
 const Curve = fun(["number"], Point);
 /** A function from a curve to a curve (a transformation of curves). */
 const Transformer = fun([Curve], Curve);
-/** What `draw_connected(200)` and the like are: applied to a curve, they draw it. */
+/**
+ * What `draw_connected(200)` and the like are: applied to a curve, they draw it. The 2D drawers and the
+ * 3D drawers (`draw_3D_connected`) are different types: `animate_curve` rejects a 3D drawer and
+ * `animate_3D_curve` a 2D one, at run time, so the types tell them apart.
+ */
 const Drawer = fun([Curve], opaque("CurveDrawn"));
+const Drawer3D = fun([Curve], opaque("Curve3DDrawn"));
 
 /**
  * TEMPORARY: the types of `curve`, written by hand from the module's declarations (functions.ts,
@@ -19,7 +24,7 @@ const Drawer = fun([Curve], opaque("CurveDrawn"));
 export const CURVE: ModuleDescription = {
   version: 1,
   module: "curve",
-  opaqueTypes: ["Point", "CurveDrawn", "CurveAnimation"],
+  opaqueTypes: ["Point", "CurveDrawn", "Curve3DDrawn", "CurveAnimation"],
   functions: [
     fn(
       "make_point",
@@ -130,20 +135,25 @@ export const CURVE: ModuleDescription = {
       "draw_points",
       "draw_points_full_view",
       "draw_points_full_view_proportional",
+    ].map(name => fn(name, [["num_points", "integer"]], Drawer)),
+    ...[
       "draw_3D_connected",
       "draw_3D_connected_full_view",
       "draw_3D_connected_full_view_proportional",
       "draw_3D_points",
       "draw_3D_points_full_view",
       "draw_3D_points_full_view_proportional",
-    ].map(name => fn(name, [["num_points", "integer"]], Drawer)),
-    ...["animate_curve", "animate_3D_curve"].map(name =>
+    ].map(name => fn(name, [["num_points", "integer"]], Drawer3D)),
+    ...[
+      ["animate_curve", Drawer],
+      ["animate_3D_curve", Drawer3D],
+    ].map(([name, drawer]) =>
       fn(
-        name,
+        name as string,
         [
           ["duration", "number"],
           ["fps", "number"],
-          ["drawer", Drawer],
+          ["drawer", drawer as TypeDescription],
           ["func", fun(["number"], Curve)],
         ],
         opaque("CurveAnimation"),
