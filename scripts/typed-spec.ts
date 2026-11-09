@@ -27,7 +27,7 @@ function balanced(text: string, open: number): { inside: string; end: number } {
 }
 
 /** The top-level comma-separated parts of `text` (commas inside brackets do not separate). */
-function splitTopLevel(text: string): string[] {
+export function splitTopLevel(text: string): string[] {
   const parts: string[] = [];
   let depth = 0;
   let start = 0;
@@ -118,6 +118,17 @@ function writable(types: string[], taken: string[]): { types: string[]; added: s
   };
 }
 
+/** The types of the constants of the prelude (`math_pi: float`), by name. */
+export function constantsOf(prelude: string): Map<string, string> {
+  const constants = new Map<string, string>();
+  for (const group of groupsOf(prelude))
+    for (const line of group.lines) {
+      const constant = /^([a-z][A-Za-z0-9_]*): (.+)$/.exec(line);
+      if (constant) constants.set(constant[1], constant[2]);
+    }
+  return constants;
+}
+
 /**
  * `name[A, B](f: ..., xs: ...) -> R`: the declaration with the parameter names of a listing (`names`, in order;
  * a `*` in front of a star parameter). What a program cannot write is made writable (see `writable`).
@@ -128,15 +139,20 @@ export function renderSignature(
   names: string[],
   declaration: Declaration,
   shown: string = key,
+  /**
+   * Whether the signature is part of a program (a listing): then `Any` and `TypeIs`, which a program cannot
+   * write, are replaced. In the documentation of the names it is the declaration as the checker has it.
+   */
+  forProgram = true,
 ): string {
   if (names.length !== declaration.parameters.length)
     throw new Error(
       `${key} has ${names.length} parameters in the listing and ${declaration.parameters.length} in its declaration`,
     );
-  const { types, added } = writable(
-    [...declaration.parameters.map(p => p.type), declaration.returns],
-    declaration.typeParameters,
-  );
+  const all = [...declaration.parameters.map(p => p.type), declaration.returns];
+  const { types, added } = forProgram
+    ? writable(all, declaration.typeParameters)
+    : { types: all, added: [] };
   const parameters = names.map((parameter, i) => `${parameter}: ${types[i]}`);
   const typeParameters = [...declaration.typeParameters, ...added];
   const generic = typeParameters.length ? `[${typeParameters.join(", ")}]` : "";

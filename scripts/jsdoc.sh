@@ -93,12 +93,23 @@ run() {
   # Python §4
   run_jsdoc "Python §4" "README_4.md" "python_4" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" "$LIB/pairmutator.js" "$LIB/list.js" "$LIB/stream.js" "$LIB/mce.js" &
 
-  # Python §4 Typed: its front page has the types of the predeclared names, taken from the declarations
-  # that the type checker uses (src/typecheck/prelude.pyi)
-  local typed_readme
-  typed_readme="$(mktemp -d)/README_4_typed.md"
+  # Python §4 Typed: the documentation of the predeclared names with their types, which come from the
+  # declarations that the type checker uses (src/typecheck/prelude.pyi): the library sources with the types
+  # (scripts/typed-lib.ts), and a front page with the types of all names (scripts/typed-readme.ts)
+  local typed_dir typed_readme typed_lib
+  typed_dir="$(mktemp -d)"
+  typed_readme="$typed_dir/README_4_typed.md"
+  typed_lib="$typed_dir/lib"
+  yarn tsx scripts/typed-lib.ts "$typed_lib"
   yarn tsx scripts/typed-readme.ts "$MD/README_4_typed.md" src/typecheck/prelude.pyi "$typed_readme"
-  run_jsdoc "Python §4 Typed" "$typed_readme" "python_4_typed" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" "$LIB/pairmutator.js" "$LIB/list.js" "$LIB/stream.js" "$LIB/mce.js" &
+  run_jsdoc "Python §4 Typed" "$typed_readme" "python_4_typed" "$typed_lib/misc.js" "$typed_lib/math.js" "$typed_lib/linked_list.js" "$typed_lib/pairmutator.js" "$typed_lib/list.js" "$typed_lib/stream.js" "$typed_lib/mce.js" &
+  run_jsdoc "MISC (typed)" "README_MISC.md" "MISC_typed" "$typed_lib/misc.js" &
+  run_jsdoc "MATH (typed)" "README_MATH.md" "MATH_typed" "$typed_lib/math.js" &
+  run_jsdoc "LINKED LIST (typed)" "README_LINKED LIST.md" "LINKED LIST_typed" "$typed_lib/linked_list.js" &
+  run_jsdoc "PAIR MUTATOR (typed)" "README_PAIR MUTATOR.md" "PAIR MUTATOR_typed" "$typed_lib/pairmutator.js" &
+  run_jsdoc "LIST (typed)" "README_LIST.md" "LIST_typed" "$typed_lib/list.js" &
+  run_jsdoc "STREAM (typed)" "README_STREAM.md" "STREAM_typed" "$typed_lib/stream.js" &
+  run_jsdoc "MCE (typed)" "README_MCE.md" "MCE_typed" "$typed_lib/mce.js" &
 
   wait
 }
