@@ -145,6 +145,23 @@ test("a type that an earlier chunk of the session imported cannot be used as a v
   expect(outputs).toEqual(["True", "7", "8"]);
 });
 
+test("a local name hides the type's name inside a function, a lambda and a loop", async () => {
+  const { session, outputs } = await setUp();
+  await session.runChunk(
+    "from rune import Rune\n" +
+      "def f(Rune: int) -> None:\n    print(Rune)\n" +
+      "def g() -> None:\n    Rune = 2\n    print(Rune)\n" +
+      "def h(n: int) -> None:\n    for Rune in range(n, n + 1):\n        print(Rune)\n" +
+      "f(1)\ng()\nh(3)\nprint((lambda Rune: Rune + 4)(1))\n",
+  );
+  expect(outputs).toEqual(["1", "2", "3", "5"]);
+  // outside those scopes the name is still the type
+  const error = await session
+    .runChunk("def k(x: int) -> int:\n    return x\nprint(Rune)\n")
+    .catch((e: unknown) => e);
+  expect((error as StaticTypeErrors).errors[0]).toMatchObject({ line: 3 });
+});
+
 describe("the names that a program imports only as types", () => {
   const erased = (source: string) =>
     eraseTypes(parse(source), { typeNames: () => new Set(["Rune"]) }).statements[0];

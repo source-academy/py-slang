@@ -1,6 +1,58 @@
-import { ExprNS, StmtNS } from "../ast-types";
+import { ExprNS, StmtNS, type FunctionParam } from "../ast-types";
 import type { Token } from "../tokenizer";
 import { ASTNode, traverseAST } from "../validator";
+
+/**
+ * The names that a function (or lambda) binds in its own scope: its parameters, and what its body
+ * assigns, defines, imports or loops over (except what it declares `global`).
+ */
+function localNames(params: FunctionParam[], body: StmtNS.Stmt[]): Set<string> {
+  const names = new Set(params.map(param => param.lexeme));
+  const globals = new Set<string>();
+  const walk = (statements: StmtNS.Stmt[]) => {
+    for (const stmt of statements) {
+      if (stmt instanceof StmtNS.Assign) {
+        if (stmt.target instanceof ExprNS.Variable) names.add(stmt.target.name.lexeme);
+      } else if (stmt instanceof StmtNS.FunctionDef) names.add(stmt.name.lexeme);
+      else if (stmt instanceof StmtNS.FromImport)
+        for (const { name, alias } of stmt.names) names.add((alias ?? name).lexeme);
+      else if (stmt instanceof StmtNS.Global) stmt.names.forEach(name => globals.add(name.lexeme));
+      else if (stmt instanceof StmtNS.For) {
+        names.add(stmt.target.lexeme);
+        walk(stmt.body);
+      } else if (stmt instanceof StmtNS.If) {
+        walk(stmt.body);
+        if (stmt.elseBlock) walk(stmt.elseBlock);
+      } else if (stmt instanceof StmtNS.While) walk(stmt.body);
+    }
+  };
+  walk(body);
+  globals.forEach(name => names.delete(name));
+  return names;
+}
+
+/**
+ * The uses of the `types` names that refer to a local binding of the function that they are in
+ * (`def f(Rune: int): print(Rune)`), not to the type: the function's own scope hides the type's name.
+ */
+function shadowedUses(program: ASTNode, types: ReadonlySet<string>): Set<ExprNS.Variable> {
+  const shadowed = new Set<ExprNS.Variable>();
+  const hide = (names: Set<string>, inside: ASTNode[]) => {
+    for (const name of names) {
+      if (!types.has(name)) continue;
+      for (const root of inside)
+        traverseAST(root, node => {
+          if (node instanceof ExprNS.Variable && node.name.lexeme === name) shadowed.add(node);
+        });
+    }
+  };
+  traverseAST(program, node => {
+    if (node instanceof StmtNS.FunctionDef || node instanceof ExprNS.MultiLambda)
+      hide(localNames(node.parameters, node.body), node.body);
+    else if (node instanceof ExprNS.Lambda) hide(localNames(node.parameters, []), [node.body]);
+  });
+  return shadowed;
+}
 
 export interface EraseOptions {
   /** The names that a module defines only as types: `rune` has `Rune`. */
@@ -85,8 +137,10 @@ export function eraseTypes<T extends ASTNode>(program: T, options: EraseOptions 
     ),
   );
   if (onValueUse && types.size > 0) {
+    const shadowed = shadowedUses(program, types);
     traverseAST(program, node => {
-      if (node instanceof ExprNS.Variable && types.has(node.name.lexeme)) onValueUse(node.name);
+      if (node instanceof ExprNS.Variable && types.has(node.name.lexeme) && !shadowed.has(node))
+        onValueUse(node.name);
     });
   }
   return program;
