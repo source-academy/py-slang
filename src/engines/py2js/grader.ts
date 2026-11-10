@@ -11,7 +11,10 @@
  *    eraseTypesBeforeValidation })` checks the rules of Python §4 Typed on the annotations and erases
  *    the types.
  */
-import { TypedPythonChecker, prepareTypedProgram } from "../../typecheck";
+import { TypedPythonChecker, type ChunkChecker } from "../../typecheck";
+import { typedBeforeValidationWithoutSession } from "../../conductor/typed";
+import { opaqueTypeNames } from "../../typecheck/module-description";
+import { temporaryDescriptions } from "../../typecheck/modules";
 import { nodeWorkerFactory } from "../../typecheck/node-worker";
 import type { Py2JsSessionOptions } from "./index";
 
@@ -25,13 +28,23 @@ export function startNodeChecker(script: string): Promise<TypedPythonChecker> {
 }
 
 /**
- * The `beforeValidation` of a session that runs a program that the checker has accepted: the rules on
- * the annotations are checked (the first violation is thrown), then the types are erased.
+ * What the erasure of types needs of a checker: the names that a module defines only as types (`Rune` of
+ * `rune`), which a program imports to annotate and which the module does not export. The grader's own
+ * checker has found no type errors by now, so `check` finds none.
  */
-export const eraseTypesBeforeValidation: NonNullable<Py2JsSessionOptions["beforeValidation"]> = (
-  _script,
-  ast,
-) => {
-  prepareTypedProgram(ast);
-  return Promise.resolve();
+const erasingChecker: ChunkChecker = {
+  proposeChunk: () => Promise.reject(new Error("the grader checks programs, not chunks")),
+  check: () => Promise.resolve([]),
+  typeNames(module) {
+    const description = temporaryDescriptions(module);
+    return description && description.module === module ? opaqueTypeNames(description) : undefined;
+  },
 };
+
+/**
+ * The `beforeValidation` of a session that runs a program that the checker has accepted: the rules on
+ * the annotations are checked (the first violation is thrown), then the types are erased as in an
+ * evaluator of Python §4 Typed (a type-only import is left out, and its use as a value is rejected).
+ */
+export const eraseTypesBeforeValidation: NonNullable<Py2JsSessionOptions["beforeValidation"]> =
+  typedBeforeValidationWithoutSession(erasingChecker);

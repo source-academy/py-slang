@@ -60,3 +60,9 @@ describe("the autograder entry", () => {
     await expect(run("x: int\n")).rejects.toThrow();
   });
 });
+
+describe("the erasure of types in the autograder entry", () => {
+  test("a type that a module defines only as a type is not a value", async () => {
+    await expect(run("from rune import Rune\nprint(Rune)\n")).rejects.toThrow(/is a type/);
+  });
+});
