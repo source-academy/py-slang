@@ -5,6 +5,7 @@
  */
 import { readFileSync } from "fs";
 import { join } from "path";
+import { groupsOf } from "../../scripts/typed-readme";
 import { VARIANT_GROUPS } from "../runner";
 import { TypedPythonChecker } from "../typecheck";
 import { CHECKER_SETUP_TIMEOUT_MS, startTypedChecker } from "./typecheck-harness";
@@ -45,6 +46,36 @@ function preludeNames(): Set<string> {
  */
 const PENDING = new Set(["parse", "tokenize", "apply_in_underlying_python"]);
 
+/**
+ * The names that the checker takes from typeshed, not from the prelude (the documentation says that
+ * they have the types that Python's standard library gives them, and links to its documentation).
+ */
+const TYPESHED = new Set([
+  "print",
+  "len",
+  "abs",
+  "max",
+  "min",
+  "round",
+  "input",
+  "repr",
+  "str",
+  "complex",
+]);
+
+/** The names whose declarations the documentation of Python §4 Typed generates from the prelude. */
+function documentedNames(): Set<string> {
+  const text = readFileSync(join(__dirname, "../typecheck/prelude.pyi"), "utf8");
+  const names = new Set<string>();
+  for (const group of groupsOf(text)) {
+    for (const line of group.lines) {
+      const match = /^(?:def |type )?([A-Za-z0-9_]+)/.exec(line);
+      if (match) names.add(match[1]);
+    }
+  }
+  return names;
+}
+
 describe("the prelude", () => {
   let checker: TypedPythonChecker;
   beforeAll(async () => {
@@ -71,5 +102,24 @@ describe("the prelude", () => {
     const provided = pythonFourNames();
     const extra = [...preludeNames()].filter(name => !provided.has(name) && !TYPES.has(name));
     expect(extra.sort()).toEqual([]);
+  });
+
+  test("every name of Python §4 is documented from the prelude, or is an exception that is listed", () => {
+    const documented = documentedNames();
+    const unaccounted = [...pythonFourNames()].filter(
+      name => !documented.has(name) && !TYPESHED.has(name) && !PENDING.has(name),
+    );
+    expect(unaccounted.sort()).toEqual([]);
+  });
+
+  test("the listed exceptions are exceptions: the prelude does not document them", () => {
+    const documented = documentedNames();
+    const listed = [...TYPESHED, ...PENDING].filter(name => documented.has(name));
+    expect(listed.sort()).toEqual([]);
+  });
+
+  test("every name of Python §4 that is listed as typeshed's is one of Python §4", () => {
+    const provided = pythonFourNames();
+    expect([...TYPESHED].filter(name => !provided.has(name)).sort()).toEqual([]);
   });
 });
