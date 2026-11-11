@@ -47,3 +47,11 @@ def str_or_list(x: str | list[int]) -> int:
     if is_list(x):
         return 0
     return x + 1                                   # ERROR: Operator "+" not supported for types "str" and "int"
+def not_float(n: int) -> str:
+    if is_float(n):
+        return "float"
+    return n                                       # ERROR: not assignable to return type "str"
+def not_complex(x: float) -> str:
+    if is_complex(x):
+        return "complex"
+    return x                                       # ERROR: not assignable to return type "str"

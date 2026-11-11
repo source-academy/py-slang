@@ -91,17 +91,20 @@ export function declarationsOf(prelude: string, helpers: string): Map<string, De
   return declarations;
 }
 
-/** `TypeIs[T]` (a result that narrows its argument, which a program cannot write) is `bool`; `T` may have brackets. */
+/**
+ * `TypeIs[T]` and `TypeGuard[T]` (a result that narrows its argument, which a program cannot write) are
+ * `bool`; `T` may have brackets.
+ */
 function withoutTypeIs(type: string): string {
-  const at = type.indexOf("TypeIs[");
-  if (at < 0) return type;
-  const { end } = balanced(type, at + "TypeIs".length);
-  return withoutTypeIs(`${type.slice(0, at)}bool${type.slice(end)}`);
+  const match = /\bType(?:Is|Guard)(?=\[)/.exec(type);
+  if (!match) return type;
+  const { end } = balanced(type, match.index + match[0].length);
+  return withoutTypeIs(`${type.slice(0, match.index)}bool${type.slice(end)}`);
 }
 
 /**
  * A type that a program can write: `Any` (which a program cannot write) becomes a type parameter of its
- * own, `TypeIs[T]` (a result that narrows the argument) is `bool`.
+ * own, `TypeIs[T]` and `TypeGuard[T]` (a result that narrows the argument) are `bool`.
  */
 function writable(types: string[], taken: string[]): { types: string[]; added: string[] } {
   const added: string[] = [];
@@ -140,7 +143,7 @@ export function renderSignature(
   declaration: Declaration,
   shown: string = key,
   /**
-   * Whether the signature is part of a program (a listing): then `Any` and `TypeIs`, which a program cannot
+   * Whether the signature is part of a program (a listing): then `Any`, `TypeIs` and `TypeGuard`, which a program cannot
    * write, are replaced. In the documentation of the names it is the declaration as the checker has it.
    */
   forProgram = true,
@@ -190,7 +193,10 @@ export function typesAppendix(prelude: string): string {
     "\\section*{Appendix: Types of the predeclared names}",
     "",
     "The predeclared names have the following types. \\lstinline{TypeIs[T]} means \\lstinline{bool}, and in",
-    "addition narrows the type of the argument to \\lstinline{T}; \\lstinline{NoReturn} is the result of a",
+    "addition narrows the type of the argument to \\lstinline{T}; \\lstinline{TypeGuard[T]} also means",
+    "\\lstinline{bool}, but narrows the type only where the result is true. \\lstinline{is_float} and",
+    "\\lstinline{is_complex} have it, because the checker takes an \\lstinline{int} for a \\lstinline{float}",
+    "and a \\lstinline{complex}, although \\lstinline{is_float(5)} is false. \\lstinline{NoReturn} is the result of a",
     "function that never returns. In the \\lstinline{TypeIs} of \\lstinline{is_pair} and \\lstinline{is_list},",
     "\\lstinline{object} stands for the types of the components and elements, which the checker does not know:",
     "it accepts any type there, so that narrowing a union keeps its pairs and its lists.",

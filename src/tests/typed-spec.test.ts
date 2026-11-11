@@ -45,7 +45,7 @@ describe("the typed listings of the library", () => {
     // a type that a program cannot write is a type parameter of its own, or bool
     expect(text).toContain("def head[H, T](p: Pair[H, T]) -> H:");
     expect(text).toContain("def is_pair(x: object) -> bool:");
-    expect(text).not.toMatch(/\bAny\b|TypeIs/);
+    expect(text).not.toMatch(/\bAny\b|TypeIs|TypeGuard/);
     // the helpers, which the checker does not predeclare
     expect(text).toContain("def _length[A](xs: LList[A], acc: int) -> int:");
   });
