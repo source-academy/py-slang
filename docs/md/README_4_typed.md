@@ -163,7 +163,9 @@ number that you give to a module, and `float` for a number that it gives back, a
 
 ## Types of the predeclared names
 
-`TypeIs[T]` means `bool`, and in addition narrows the type of the argument to `T`, and `NoReturn` is the result
+`TypeIs[T]` means `bool`, and in addition narrows the type of the argument to `T`. `TypeGuard[T]` also means `bool`,
+but narrows the type only where the result is true: `is_float` and `is_complex` have it, because the checker takes an
+`int` for a `float` and a `complex`, although `is_float(5)` is false. `NoReturn` is the result
 of a function that never returns (`error`; you cannot write it in a program either). In the `TypeIs` of `is_pair` and `is_list`, `object` stands for the types of the components and elements,
 which the checker does not know: it accepts any type there, so that narrowing a union keeps its pairs and
 its lists.
