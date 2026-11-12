@@ -215,3 +215,34 @@ export function buildWorkerBundle(bundle: WorkerBundle, options: BuildOptions): 
   }
   return { source, kept, dropped };
 }
+
+/**
+ * Pyright's checker validates the condition of `if`, `while`, a conditional expression, `not`, `assert`
+ * and a comprehension's `if` (`_validateConditionalIsBool`: with Source Python's `builtins.pyi`, an
+ * operand whose `__bool__` returns `None` is "Invalid conditional operand"), but not the operands of
+ * `and` and `or`. Python §4 Typed requires them to be bools, as Python §4's operator table does for the
+ * left operand and as the specification of Python §4 Typed does for the right operand too, so that
+ * `a and b` has the type `bool`. This adds the two calls to the checker's `visitBinaryOperation`
+ * (the operators `and` and `or` are 36 and 37 in pyright's `OperatorType`), and throws if the shape of
+ * the checker has changed.
+ */
+export function patchBoolOperandChecks(source: string): string {
+  const anchor = "visitBinaryOperation(e){12===e.d.operator||28===e.d.operator";
+  const count = source.split(anchor).length - 1;
+  if (count !== 1) {
+    throw new Error(
+      `pyright has changed: expected exactly one checker visitBinaryOperation, found ${count}. ` +
+        `Update patchBoolOperandChecks in src/typecheck/bundler/bundle.ts.`,
+    );
+  }
+  const operators = "(36===e.d.operator||37===e.d.operator)";
+  if (!source.includes("_validateConditionalIsBool(e){")) {
+    throw new Error("pyright has changed: its checker has no _validateConditionalIsBool.");
+  }
+  return source.replace(
+    anchor,
+    () =>
+      `visitBinaryOperation(e){${operators}&&(this._validateConditionalIsBool(e.d.leftExpr),` +
+      `this._validateConditionalIsBool(e.d.rightExpr));12===e.d.operator||28===e.d.operator`,
+  );
+}

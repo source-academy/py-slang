@@ -12,7 +12,7 @@ import { dirname, resolve } from "path";
 import { parse } from "acorn";
 import { TYPED_PYTHON_4_CONFIG } from "../config";
 import { WORKSPACE_ROOT } from "../constants";
-import { buildWorkerBundle, readWorkerBundle } from "./bundle";
+import { buildWorkerBundle, patchBoolOperandChecks, readWorkerBundle } from "./bundle";
 import { patchSourceBuiltins, patchSourceTypes } from "./source-builtins";
 
 export const TYPED_PY4_CHECKER_FILE = "dist/TypedPy4Checker.js";
@@ -107,6 +107,8 @@ function build(out: string, stamp: string): BuildReport {
       [`${WORKSPACE_ROOT}/pyrightconfig.json`]: JSON.stringify(TYPED_PYTHON_4_CONFIG),
     },
   });
+
+  result.source = patchBoolOperandChecks(result.source);
 
   // The edits are text surgery on 18 MB of generated JavaScript: check that the result still parses.
   parse(result.source, { ecmaVersion: "latest", sourceType: "script" });
