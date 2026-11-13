@@ -215,3 +215,55 @@ export function buildWorkerBundle(bundle: WorkerBundle, options: BuildOptions): 
   }
   return { source, kept, dropped };
 }
+
+/**
+ * Pyright's `_validateConditionalIsBool` (its checker calls it for the condition of `if`, `while`, a
+ * conditional expression, `not`, `assert` and a comprehension's `if`) accepts a value whose type has a
+ * `__bool__` that returns `bool`, or none: with Source Python's `builtins.pyi`, only `int`, `str`, `list`
+ * and the like are rejected, whereas a `Pair`, a function or an `object` is taken as always true. This
+ * makes it accept exactly `bool` (and what is unknown, which is reported elsewhere).
+ *
+ * Pyright does not call it for the operands of `and` and `or`: this adds the two calls to the checker's
+ * `visitBinaryOperation` (the operators `and` and `or` are 36 and 37 in pyright's `OperatorType`). Python
+ * §4 requires a bool for the left operand, and Python §4 Typed for the right operand too, so that
+ * `a and b` has the type `bool`.
+ *
+ * It throws if the shape of the checker has changed.
+ */
+export function patchBoolOperandChecks(source: string): string {
+  const expectOnce = (anchor: string, what: string) => {
+    const count = source.split(anchor).length - 1;
+    if (count !== 1) {
+      throw new Error(
+        `pyright has changed: expected exactly one ${what}, found ${count}. ` +
+          `Update patchBoolOperandChecks in src/typecheck/bundler/bundle.ts.`,
+      );
+    }
+  };
+
+  // A subtype that has no `__bool__` at all (a `Pair`, a function, an `object`) is invalid too.
+  const magic =
+    'let o=this._evaluator.getTypeOfMagicMethodCall(n,"__bool__",[],e,void 0)?.type;' +
+    '!o||(0,G.isAnyOrUnknown)(o)||(0,G.isClassInstance)(o)&&G.ClassType.isBuiltIn(o,"bool")||' +
+    "(t=!1,r.addMessage(m.LocAddendum.conditionalRequiresBool().format(" +
+    "{operandType:this._evaluator.printType(n),boolReturnType:this._evaluator.printType(o)})))";
+  expectOnce(magic, "check of `__bool__` in _validateConditionalIsBool");
+
+  const visit = "visitBinaryOperation(e){12===e.d.operator||28===e.d.operator";
+  expectOnce(visit, "checker visitBinaryOperation");
+
+  const operators = "(36===e.d.operator||37===e.d.operator)";
+  const strict =
+    'let o=this._evaluator.getTypeOfMagicMethodCall(n,"__bool__",[],e,void 0)?.type;' +
+    '(o&&((0,G.isAnyOrUnknown)(o)||(0,G.isClassInstance)(o)&&G.ClassType.isBuiltIn(o,"bool")))||' +
+    "(t=!1,r.addMessage(m.LocAddendum.conditionalRequiresBool().format(" +
+    '{operandType:this._evaluator.printType(n),boolReturnType:o?this._evaluator.printType(o):""})))';
+  return source
+    .replace(magic, () => strict)
+    .replace(
+      visit,
+      () =>
+        `visitBinaryOperation(e){${operators}&&(this._validateConditionalIsBool(e.d.leftExpr),` +
+        `this._validateConditionalIsBool(e.d.rightExpr));12===e.d.operator||28===e.d.operator`,
+    );
+}

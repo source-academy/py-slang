@@ -113,10 +113,10 @@ type Tree[T] = Pair[T, LList[Tree[T]]]
 The condition after \texttt{if}, \texttt{elif} and \texttt{while}, the condition of a
 conditional expression, and the operand of \texttt{not} must have the type \texttt{bool}.
 
-The left operand of \texttt{and} and \texttt{or} must have the type \texttt{bool} as well, but this
-is not checked statically: a program in which it has another type, such as
-\texttt{3~and~4}, has no static type error, and fails when it runs, as in Python \S 4 (see the
-section ``Dynamic Type Checking'' below).
+Both operands of \texttt{and} and \texttt{or} must have the type \texttt{bool} as well: a program
+in which one has another type, such as \texttt{3~and~True} or \texttt{True~and~4}, has a static type
+error. (When a program runs, only the left operand is checked, see the section ``Dynamic Type
+Checking'' below.)
 
 In the branches of a conditional statement or conditional expression, the type of a name is
 narrowed according to the condition. If \texttt{xs} has the type \texttt{LList[}$T$\texttt{]},
@@ -139,13 +139,12 @@ Checking'' below, with these additions:
   \item \texttt{==}, \texttt{!=}, \texttt{is} and \texttt{is not} accept operands of any
     types; \texttt{>}, \texttt{>=}, \texttt{<} and \texttt{<=} compare \texttt{bool} values with
     \texttt{int} and \texttt{float} values, as in Python \S 4.
-  \item $a$~\texttt{and}~$b$ and $a$~\texttt{or}~$b$ have the type \texttt{bool~|~}$T$, where
-    $T$ is the type of $b$.
+  \item $a$~\texttt{and}~$b$ and $a$~\texttt{or}~$b$ have the type \texttt{bool}, and both $a$ and $b$
+    must have the type \texttt{bool}.
 \end{itemize}
-The right operand of \texttt{and} and \texttt{or} is deliberately not required to have the type
-\texttt{bool}. Its value is the value of the whole expression, without any further check, so
-that a function whose result is $a$~\texttt{and}~$f(\ldots)$ or $a$~\texttt{or}~$f(\ldots)$
-still gives rise to an iterative process, as in
+The right operand of \texttt{and} and \texttt{or} is not checked when the program runs: its value is
+the value of the whole expression, so that a function whose result is $a$~\texttt{and}~$f(\ldots)$ or
+$a$~\texttt{or}~$f(\ldots)$ still gives rise to an iterative process, as in
 \begin{lstlisting}
 def is_even(n: int) -> bool:
     return n == 0 or is_odd(n - 1)

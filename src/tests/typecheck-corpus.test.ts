@@ -83,13 +83,15 @@ describe("the type checker on programs", () => {
     expect([...errorsByLine(diagnostics).keys()]).toEqual([1, 2]);
   });
 
-  test("the left operand of and/or is not checked statically: a limitation, in the specification", async () => {
-    // Python §4 wants a bool there. Pyright has no rule for it, and `and` does not call a method of
-    // its operand's type that could be changed (making `__bool__` an error is what makes `if 1:` an
-    // error, and it has no effect here), so there is no static error ...
-    const diagnostics = await checker.check("k = 3 and 4\nm = 'a' or 1\n");
-    expect(errorsByLine(diagnostics).size).toBe(0);
-    // ... and the engines report it when the program runs.
+  test("both operands of and/or must be bools, as the condition of an if is", async () => {
+    // Pyright does not validate them itself: the build adds the check (`patchBoolOperandChecks`).
+    const diagnostics = await checker.check(
+      "a = 3 and True\nb = True and 4\nc = 'a' or False\nd = False or 'a'\ne = True and False or True\n",
+    );
+    expect([...errorsByLine(diagnostics).keys()]).toEqual([1, 2, 3, 4]);
+    // The engines still run `False and 1`, whose value is the right operand, unchecked: that keeps
+    // `n == 0 or is_odd(n - 1)` iterative, and it is the checker that makes the operand a bool.
+    // They reject a left operand that is not a bool, as in Python §4.
     await expect(runCode("print(3 and 4)\n", 4)).rejects.toThrow();
   });
 });

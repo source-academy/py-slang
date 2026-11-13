@@ -38,7 +38,7 @@ The spike, kept on the branch `spike/pyright-typecheck` and not merged
   (recursion, higher-order functions, linked lists, streams, `nonlocal`, loops, Python lists, pair
   mutation), and all 14 planted errors found.
 * A patched `builtins.pyi` enforces most of Source's strict-bool rules: non-bool conditions in
-  `if`/`while`/ternary/`not`, and `True + 1`. It misses only the left operand of `and`/`or`.
+  `if`/`while`/ternary/`not`, and `True + 1`. The operands of `and`/`or` are checked by a patch of pyright's checker (see the rules).
 * With third-party stubs and unused stdlib stubs removed, the bundle is 4.7 MB raw, 1.0 MB gzip,
   0.77 MB brotli. Worker startup is 180–280 ms, the first check 210–330 ms, later checks 10–40 ms.
 
@@ -89,8 +89,11 @@ Decided in phase 0 unless marked *proposed*. Each rule was tried on the spike's 
   `tuple` and `dict` have `__bool__ -> None`, and `bool` does not subclass `int`. So `True + 1`,
   `xs[True]` and `[0] * True` are errors, as in Python §4. `bool` keeps `<`, `<=`, `>`, `>=` with
   `int`/`float`, because Python §4 compares bools with numbers as 1 and 0
-  (`docs/specs/python_typing_tail_34.tex`). Only the *left* operand of `and`/`or` must be a bool
-  (`True and 4` is `4`); pyright does not check it, so that needs a small rule (see phase 2).
+  (`docs/specs/python_typing_tail_34.tex`). The operands of `and`/`or` must be bools too, so that `a and b` has the type `bool`:
+  Python §4 requires it of the left operand (`3 and 4` fails when it runs); the right operand is not
+  checked when the program runs (`False and 1` is `False`), so that `n == 0 or is_odd(n - 1)` stays
+  iterative, but the type checker requires a bool there as well. Pyright does not validate them (see
+  below).
 * **`**`**: the Source `builtins.pyi` also replaces typeshed's `Any` results of `int.__pow__` and
   `float.__pow__` (see the rules table).
 * **Builtins**: only the Python §4 builtins and the Source prelude are in scope. Python builtins
@@ -281,15 +284,16 @@ Done. What was built, and where it differs from the first sketch:
 * **Configuration** (`config.ts`): `standard` mode, the unknown-type rules as errors,
   `reportRedeclaration` off (a name can be defined again in §3 and §4) and `reportUnusedExpression`
   off (`1 + 2` in a REPL).
-* **Not done, and documented:** the rule that the left operand of `and` and `or` must be a `bool`.
-  Pyright has no rule for it, and typeshed cannot be patched to give one (`and` calls no method of the
-  operand's type that could be changed: making `__bool__` an error is what rejects `if 1:`, and it has
-  no effect on `and`), so `3 and 4` has no static error and is rejected when it runs, which the
-  specification says ("Static Type Checking") and a test shows. Only a workaround outside pyright could
-  check it: py-slang asking for the type of each such operand (hover requests, which may meet the
-  problem of the browsers that `textDocument/diagnostic` had), rewriting the text that pyright sees
-  (which moves columns), or changing pyright's checker in the bundle (fragile); none is worth it while
-  the dynamic check stays.
+* **Conditions and the operands of `and`/`or`:** pyright's checker validates conditions
+  (`_validateConditionalIsBool`), but only through `__bool__`: a `Pair`, a function or an `object` has
+  none and is taken as always true, and it does not look at the operands of `and` and `or` at all
+  (typeshed cannot change that: `and` calls no method of the operand's type). The build therefore
+  patches the checker (`patchBoolOperandChecks` in `bundler/bundle.ts`): a type without a `__bool__`
+  that returns `bool` is not a condition, and the operands of `and`/`or` are validated like the
+  condition of an `if`. It throws if pyright's checker has another shape, as the patches of
+  `builtins.pyi` do. A non-bool is reported as "A condition must be a bool, but this is an int". The
+  engines still check only the left operand when the program runs (the right one is not, for tail
+  calls), so the checker is the only guard for the right operand.
 * **`python/sicp`:** the type names `Pair`, `LList`, `Stream` and `Callable`, as aliases of `typing`
   (not `type` statements, because the package supports Python 3.10), so that annotated programs run
   in CPython. This also fixed a mistake in the package that typed programs show: `from sicp import *`

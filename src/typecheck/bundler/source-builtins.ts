@@ -2,7 +2,8 @@
  * Derives Source Python's `builtins.pyi` and `types.pyi` from typeshed's, so that the type checker
  * knows Python §4's rules where they differ from Python's:
  *
- * - Strict bool: an `if`, `while`, conditional expression, `not` or `and`/`or` needs a bool. The
+ * - Strict bool: an `if`, `while`, conditional expression, `not` or `and`/`or` needs a bool (pyright
+ *   checks all but `and`/`or` itself: `patchBoolOperandChecks` in bundle.ts adds them). The
  *   `__bool__` of int, float, complex, str, list, tuple, dict and None returns None, which pyright
  *   reports as "Invalid conditional operand".
  * - bool is not a number: it does not subclass int, so `True + 1`, `xs[True]` and `[0] * True` are

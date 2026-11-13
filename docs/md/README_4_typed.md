@@ -101,6 +101,9 @@ for example as an argument of a function whose parameter has a function type
 (`square: Callable[[int], int] = lambda x: x * x`). An assignment can declare the type of a name,
 as in `count: int = 0`; an empty list needs a declared type, as in `xs: list[int] = []`.
 
+A condition must be a `bool`, and so must both operands of `and` and `or`: `n == 0 or is_odd(n - 1)` is
+accepted, but `xs and head(xs)` and `True and 4` are type errors, and `a and b` has the type `bool`.
+
 In the branches of an `if`, the type of a name is narrowed by the condition: if `xs` is a `LList[int]`,
 it is `None` where `is_none(xs)` is true, and a pair where it is false, so that `head(xs)` is allowed there.
 
