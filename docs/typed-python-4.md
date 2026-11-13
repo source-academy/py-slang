@@ -491,8 +491,13 @@ and is **settled**; the work in the `modules` repository is [#997](https://githu
   generics) and the specification in `docs/specs`.
   **Done**: `docs/md/README_4_typed.md` is the front page (the types, annotations, generics, what type errors
   look like, the modules that can be imported, and the known limitation of numbers); the types of all
-  predeclared names are generated into it from `src/typecheck/prelude.pyi` (`scripts/typed-readme.ts`), so
-  that the documentation is what the checker uses. `scripts/jsdoc.sh` builds it as `python_4_typed`, and the
+  predeclared names that `src/typecheck/prelude.pyi` declares are generated into it from that file
+  (`scripts/typed-readme.ts`), so that the documentation is what the checker uses for them. Two groups
+  of names are not generated, and the page describes them in prose: the ten names that the checker takes
+  from typeshed (`print`, `len`, `abs`, `max`, `min`, `round`, `input`, `repr`, `str`, `complex`), and
+  `tokenize`, `parse` and `apply_in_underlying_python`, whose types wait for #631.
+  `src/tests/typecheck-prelude.test.ts` checks that every name of Python §4 is generated or is in one of
+  these two lists, so that a new name cannot be left out silently (#644). `scripts/jsdoc.sh` builds it as `python_4_typed`, and the
   specification is `python_4_typed.pdf`. **Then**: the language-directory entry's `documentation.languageUrl`
   points to the Python §4 page until this page is deployed; it is changed to `python_4_typed` in the next
   version of the directory.
