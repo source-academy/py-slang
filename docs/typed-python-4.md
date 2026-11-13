@@ -284,14 +284,16 @@ Done. What was built, and where it differs from the first sketch:
 * **Configuration** (`config.ts`): `standard` mode, the unknown-type rules as errors,
   `reportRedeclaration` off (a name can be defined again in §3 and §4) and `reportUnusedExpression`
   off (`1 + 2` in a REPL).
-* **Operands of `and` and `or`:** pyright's checker validates conditions (`_validateConditionalIsBool`)
-  but not the operands of `and` and `or`, and typeshed cannot make it (`and` calls no method of the
-  operand's type that could be changed). The build therefore adds two calls to the checker's
-  `visitBinaryOperation` (`patchBoolOperandChecks` in `bundler/bundle.ts`), which throws if pyright's
-  checker has another shape, as the patches of `builtins.pyi` do. A non-bool operand on either side is
-  then reported like a condition: "A condition must be a bool, but this is an int". The engines still
-  check only the left operand when the program runs (the right one is not, for tail calls), so the
-  checker is the only guard for the right operand.
+* **Conditions and the operands of `and`/`or`:** pyright's checker validates conditions
+  (`_validateConditionalIsBool`), but only through `__bool__`: a `Pair`, a function or an `object` has
+  none and is taken as always true, and it does not look at the operands of `and` and `or` at all
+  (typeshed cannot change that: `and` calls no method of the operand's type). The build therefore
+  patches the checker (`patchBoolOperandChecks` in `bundler/bundle.ts`): a type without a `__bool__`
+  that returns `bool` is not a condition, and the operands of `and`/`or` are validated like the
+  condition of an `if`. It throws if pyright's checker has another shape, as the patches of
+  `builtins.pyi` do. A non-bool is reported as "A condition must be a bool, but this is an int". The
+  engines still check only the left operand when the program runs (the right one is not, for tail
+  calls), so the checker is the only guard for the right operand.
 * **`python/sicp`:** the type names `Pair`, `LList`, `Stream` and `Callable`, as aliases of `typing`
   (not `type` statements, because the package supports Python 3.10), so that annotated programs run
   in CPython. This also fixed a mistake in the package that typed programs show: `from sicp import *`

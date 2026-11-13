@@ -16,5 +16,12 @@ k = 3 and True                                     # ERROR: A condition must be 
 m = True and 4                                     # ERROR: A condition must be a bool, but this is an int
 n = "a" or False                                   # ERROR: A condition must be a bool, but this is a str
 o = False or None                                  # ERROR: A condition must be a bool, but this is a None
+def not_bools(p: Pair[int, int], g: Callable[[], int], o: object) -> None:
+    if p:                                          # ERROR: A condition must be a bool, but this is a Pair[int, int]
+        pass
+    q = not g                                      # ERROR: A condition must be a bool, but this is a () -> int
+    r = True and p                                 # ERROR: A condition must be a bool, but this is a Pair[int, int]
+    s = o or False                                 # ERROR: A condition must be a bool, but this is an object
+
 while "s":                                         # ERROR: A condition must be a bool, but this is a str
     pass
