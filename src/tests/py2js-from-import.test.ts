@@ -7,7 +7,7 @@
  *
  * The flagship scenario ("module calls a Python function it was handed") is
  * exactly the sound-module case that motivated py2js's dual-compilation
- * design (see experiments/py2js/README.md): a fake `play(wave, n)` module
+ * design (see https://github.com/source-academy/py-slang/blob/c0a8dfd/experiments/py2js/README.md): a fake `play(wave, n)` module
  * function samples a Python-defined `wave` function n times, calling back
  * through conductor's own generic closure protocol (closure_call_unchecked)
  * — never touching rt.callSync directly, since real module code is
