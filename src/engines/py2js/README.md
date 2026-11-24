@@ -7,7 +7,7 @@ PVML, and WASM. It exists because the other three all keep an explicit
 interpreter loop (control/stash stepping, or a bytecode VM) between the
 program and the CPU; compiling straight to JS lets V8's own JIT do that work
 instead. Measured 37–208× faster than the CSE machine and PVML on
-chapter-1-shaped workloads (see `experiments/py2js/README.md` for the
+chapter-1-shaped workloads (see [the experiment](https://github.com/source-academy/py-slang/blob/c0a8dfd/experiments/py2js/README.md) for the
 original differential/benchmark harness that motivated building this for
 real), and the module-interop numbers below.
 

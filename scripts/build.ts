@@ -14,8 +14,6 @@ const rollupBin = createRequire(import.meta.url).resolve("rollup/dist/bin/rollup
 
 // Keep in sync with src/conductor/index.ts exports.
 const allTargets = [
-  "PyCseEvaluator1",
-  "PyCseEvaluator2",
   "PyCseEvaluator3",
   "PyCseEvaluator4",
   "PyWasmEvaluator1",

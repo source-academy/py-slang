@@ -17,7 +17,7 @@ yarn build
 # OR
 
 # specifies the evaluator to build (list given below)
-yarn build --evaluator PyCseEvaluator1
+yarn build --evaluator PyCseEvaluator3
 
 # OR
 
@@ -32,7 +32,7 @@ yarn dev
 
 # OR
 
-yarn dev --evaluator PyCseEvaluator1
+yarn dev --evaluator PyCseEvaluator3
 
 # OR
 
@@ -47,8 +47,6 @@ In either case, the evaluator is compiled to `dist/<evaluatorName>.js` and `dist
 
 | Name                                                                                                                                             | Description                                                                                                                                                                                                                                                                               |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [PyCseEvaluator1](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L95)  | Interprets Python §1 programs using the CSE machine                                                                                                                                                                                                                                       |
-| [PyCseEvaluator2](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L101) | Interprets Python §2 programs using the CSE machine                                                                                                                                                                                                                                       |
 | [PyCseEvaluator3](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L107) | Interprets Python §3 programs using the CSE machine                                                                                                                                                                                                                                       |
 | [PyCseEvaluator4](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L113) | Interprets Python §4 programs using the CSE machine                                                                                                                                                                                                                                       |
 | [PyWasmEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyWasmEvaluator.ts)                                         | Compiles Python §4 programs into WebAssembly and runs it                                                                                                                                                                                                                                  |
