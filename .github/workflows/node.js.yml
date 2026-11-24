@@ -27,6 +27,13 @@ jobs:
       - run: yarn run build --all
       - run: yarn run format:ci
       - run: yarn run lint
+      # The differential tests compare against CPython, whose behaviour differs between versions,
+      # so pin it instead of using whatever python3 the runner image ships (ubuntu-latest moved
+      # from Ubuntu 24.04 to 26.04, and with it the system Python).
+      - name: Use Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Run tests (including CPython ground-truth checks for sourceacademy-sicp)
         run: yarn run test-coverage
         env:
