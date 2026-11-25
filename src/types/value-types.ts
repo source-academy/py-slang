@@ -294,7 +294,6 @@ export interface Finished {
 
 export interface NativeStorage {
   builtins: Map<string, Value>;
-  maxExecTime: number;
   loadedModules: Record<string, ModuleFunctions>;
   loadedModuleTypes: Record<string, Record<string, string>>;
 }

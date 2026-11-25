@@ -83,7 +83,6 @@ export class Context {
     this.streams = this.createEmptyStreams();
     this.nativeStorage = {
       builtins: new Map<string, BuiltinValue>(),
-      maxExecTime: 1000,
       loadedModules: {},
       loadedModuleTypes: {},
     };
