@@ -18,6 +18,17 @@ export interface RunConfig {
   breakpointLines?: number[];
 }
 
+/**
+ * The most steps that the Stepper records in a run, as a safety net and not a setting: the trace is
+ * held in memory by the worker and then by the host, and its size grows faster than the number of
+ * steps for a recursive program, whose expression grows with the recursion (measured for
+ * `def f(n): return 0 if n == 0 else 1 + f(n - 1)` called with 100000: 1000 steps are 11 MB once
+ * serialised, 2500 are 62 MB, 5000 are 239 MB and take four seconds). A student who wants to see less
+ * presses Stop, and the steps so far are kept. The host's `stepLimit`, while it still sends one, is
+ * a lower cap.
+ */
+export const STEPPER_STEP_CAP = 3000;
+
 /** Fetches and parses `/__cse_config__`. Malformed JSON or a missing file both fall back to `{}`
  * (every field optional, so callers apply their own defaults) rather than failing the run. */
 export async function fetchRunConfig(conductor: IRunnerPlugin): Promise<RunConfig> {

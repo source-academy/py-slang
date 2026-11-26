@@ -1713,10 +1713,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-stepper@npm:^0.0.4":
-  version: 0.0.4
-  resolution: "@sourceacademy/common-stepper@npm:0.0.4"
-  checksum: 10c0/e875a6af024bf30bbc08e6dc385efc333be0a421d05f8a04ce5f0b83196699cd01063191b06853ed9d694e82b740107c1e98d2dd9ca406935ff7cd109f2c04a3
+"@sourceacademy/common-stepper@npm:^0.1.0":
+  version: 0.1.0
+  resolution: "@sourceacademy/common-stepper@npm:0.1.0"
+  checksum: 10c0/587c87faf77f3694b063360d660754fb629153325006917be38925cbecfae2a9bbd7bd0c95956bbdbe55f5b3fb01fd4a5f163533b24ba66d22e2ce1b58af4f39
   languageName: node
   linkType: hard
 
@@ -1744,7 +1744,7 @@ __metadata:
     "@sourceacademy/common-cse-machine": "npm:^0.3.1"
     "@sourceacademy/common-data-visualizer": "npm:^0.0.2"
     "@sourceacademy/common-e-stepper": "npm:^0.0.2"
-    "@sourceacademy/common-stepper": "npm:^0.0.4"
+    "@sourceacademy/common-stepper": "npm:^0.1.0"
     "@sourceacademy/conductor": "npm:^0.8.3"
     "@sourceacademy/pynter-wasm": "npm:^0.3.0"
     "@sourceacademy/runner-autocomplete": "npm:^0.0.2"
@@ -1752,7 +1752,7 @@ __metadata:
     "@sourceacademy/runner-data-visualizer": "npm:^0.0.1"
     "@sourceacademy/runner-e-stepper": "npm:^0.0.1"
     "@sourceacademy/runner-module-loader": "npm:^0.0.1"
-    "@sourceacademy/runner-stepper": "npm:^0.0.1"
+    "@sourceacademy/runner-stepper": "npm:^0.1.0"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"
@@ -1841,12 +1841,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/runner-stepper@npm:^0.0.1":
-  version: 0.0.1
-  resolution: "@sourceacademy/runner-stepper@npm:0.0.1"
+"@sourceacademy/runner-stepper@npm:^0.1.0":
+  version: 0.1.0
+  resolution: "@sourceacademy/runner-stepper@npm:0.1.0"
   peerDependencies:
-    "@sourceacademy/conductor": ">=0.3.0"
-  checksum: 10c0/0c454960bba50f1f0cfbe5d08a4c0f079100a3044ef24171104ee82594646a1fcea5e2b154dfcd7963d2b85cfb88b9e35bdcbadd85a68362c7b8b4fcb443e34d
+    "@sourceacademy/conductor": ^0.8.0
+  checksum: 10c0/c4c9a26d534b78afce6e03b6f888adf0ffc2e67f7558440f0093858456570b825291f08f12de4e9377aeaa7525f610a5464559d4c3804ccc67e84a210a5c394e
   languageName: node
   linkType: hard
 

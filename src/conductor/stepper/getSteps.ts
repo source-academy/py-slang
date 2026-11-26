@@ -104,29 +104,38 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
-async function drive(
+/** How a run of {@link driveSteps} ended, once its last step has been produced. */
+export interface StepsEnd {
+  /** Whether the run was cut off by the step limit, before the program had finished. */
+  readonly limitReached: boolean;
+}
+
+/**
+ * The steps of the program, one at a time, as they are reduced: the first step is there before
+ * anything has been reduced, so that a caller can pass the steps on while a long run is going (and
+ * keep those it had if the run is stopped). The generator returns how the run ended. {@link drive}
+ * collects the steps.
+ */
+async function* driveSteps(
   prog: StepNode,
   contractionLimit: number,
   context: StepperContext,
-): Promise<Step[]> {
+): AsyncGenerator<Step, StepsEnd> {
   // The program's cumulative output so far. A `print(...)` contraction reports its text via
   // `result.output`; we append it *between* that contraction's before and after steps, so the text
   // first appears on the "Ran print" (after) step and persists on every step after it. Every step
   // carries the running total, so the host's output panel shows exactly what had been printed by that
   // point as the slider moves (empty "" before the first print).
   let output = "";
-  const steps: Step[] = [];
-  // Every step must carry the *current* running total, so pushing goes through this closure instead
-  // of each call site restating `output` — a plain `steps.push` would silently omit it.
-  const pushStep = (ast: StepNode, markers?: Marker[]): void => {
-    steps.push({ ast, markers, output });
-  };
+  // Every step must carry the *current* running total, so making one goes through this closure
+  // instead of each call site restating `output` — a literal would silently omit it.
+  const stepOf = (ast: StepNode, markers?: Marker[]): Step => ({ ast, markers, output });
 
-  pushStep(prog, [{ explanation: "Start of evaluation" }]);
+  yield stepOf(prog, [{ explanation: "Start of evaluation" }]);
   // A limit too small for a single contraction: the start, and why there is no more.
   if (contractionLimit === 0) {
-    pushStep(prog, [{ explanation: "Maximum number of steps exceeded" }]);
-    return steps;
+    yield stepOf(prog, [{ explanation: "Maximum number of steps exceeded" }]);
+    return { limitReached: true };
   }
 
   // `reduce.ts`'s `applyPythonCallable` (a module calling back into a Python function, py-slang#423)
@@ -152,20 +161,20 @@ async function drive(
       // callbacks) was collected in `pendingOutput`; it counts.
       output += pendingOutput.text;
       pendingOutput.text = "";
-      pushStep(current, [{ redexType: "beforeMarker", explanation: message }]);
-      pushStep(current, [{ explanation: "Evaluation stuck" }]);
-      return steps;
+      yield stepOf(current, [{ redexType: "beforeMarker", explanation: message }]);
+      yield stepOf(current, [{ explanation: "Evaluation stuck" }]);
+      return { limitReached: false };
     }
     if (result === null) {
       // No further contraction: the program is either a finished value ("Evaluation complete") or a
       // tree that cannot reduce yet is not a value ("Evaluation stuck"), exactly as Source reports.
-      pushStep(current, [
+      yield stepOf(current, [
         { explanation: isComplete(current) ? "Evaluation complete" : "Evaluation stuck" },
       ]);
-      return steps;
+      return { limitReached: false };
     }
 
-    pushStep(current, [
+    yield stepOf(current, [
       {
         redex: result.preRedex,
         redexType: "beforeMarker",
@@ -189,7 +198,7 @@ async function drive(
     // `postRedex` only highlights something when the redex was replaced in place by a surviving value;
     // a contraction that discards its redex outright (see `ReduceResult.postRedex`'s doc comment)
     // leaves it unset, so the after step shows the tree with no highlight at all.
-    pushStep(result.node, [
+    yield stepOf(result.node, [
       result.postRedex
         ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
         : { redexType: "afterMarker", explanation: result.explanation },
@@ -197,10 +206,25 @@ async function drive(
 
     current = result.node;
     if (budget.remaining === 0) {
-      pushStep(current, [{ explanation: "Maximum number of steps exceeded" }]);
+      yield stepOf(current, [{ explanation: "Maximum number of steps exceeded" }]);
     }
   }
 
+  // The budget ran out: the last step said so.
+  return { limitReached: true };
+}
+
+/** The steps of {@link driveSteps}, collected. */
+async function drive(
+  prog: StepNode,
+  contractionLimit: number,
+  context: StepperContext,
+): Promise<Step[]> {
+  const steps: Step[] = [];
+  const generator = driveSteps(prog, contractionLimit, context);
+  for (let next = await generator.next(); !next.done; next = await generator.next()) {
+    steps.push(next.value);
+  }
   return steps;
 }
 
@@ -335,6 +359,38 @@ export async function getPythonSteps(
   const translated = substituteBuiltinConstants(translateProgram(fileInput));
   const program = await resolveImports(fileInput, context.evaluator, translated);
   return (await drive(program, contractionLimit, context)).map(serializeStep);
+}
+
+/** How many steps go into a batch that is passed on while the run goes on. A step holds the whole
+ * program tree, which can be large (see `STEPPER_STEP_CAP`), so not too many. */
+export const STEPS_PER_BATCH = 25;
+
+/**
+ * The same steps as {@link getPythonSteps}, in batches as they are reduced, so that a caller can pass
+ * them on while the run goes on. Returns how the run ended. A failure before the first step (an
+ * import that cannot be resolved) is thrown, as by `getPythonSteps`.
+ */
+export async function* getPythonStepBatches(
+  fileInput: StmtNS.FileInput,
+  stepLimit = 2 * DEFAULT_CONTRACTION_LIMIT,
+  context: StepperContext = {},
+): AsyncGenerator<SerializedStepperStep[], StepsEnd> {
+  const contractionLimit = contractionLimitFor(stepLimit);
+  const translated = substituteBuiltinConstants(translateProgram(fileInput));
+  const program = await resolveImports(fileInput, context.evaluator, translated);
+  const steps = driveSteps(program, contractionLimit, context);
+  let batch: Step[] = [];
+  for (let next = await steps.next(); ; next = await steps.next()) {
+    if (next.done) {
+      if (batch.length > 0) yield batch.map(serializeStep);
+      return next.value;
+    }
+    batch.push(next.value);
+    if (batch.length >= STEPS_PER_BATCH) {
+      yield batch.map(serializeStep);
+      batch = [];
+    }
+  }
 }
 
 /**
