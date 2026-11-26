@@ -1748,7 +1748,7 @@ __metadata:
     "@sourceacademy/conductor": "npm:^0.8.3"
     "@sourceacademy/pynter-wasm": "npm:^0.3.0"
     "@sourceacademy/runner-autocomplete": "npm:^0.0.2"
-    "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
+    "@sourceacademy/runner-cse-machine": "npm:^3.1.0"
     "@sourceacademy/runner-data-visualizer": "npm:^0.0.1"
     "@sourceacademy/runner-e-stepper": "npm:^0.0.2"
     "@sourceacademy/runner-module-loader": "npm:^0.0.1"
@@ -1801,13 +1801,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/runner-cse-machine@npm:^3.0.0":
-  version: 3.0.0
-  resolution: "@sourceacademy/runner-cse-machine@npm:3.0.0"
+"@sourceacademy/runner-cse-machine@npm:^3.1.0":
+  version: 3.1.0
+  resolution: "@sourceacademy/runner-cse-machine@npm:3.1.0"
   peerDependencies:
-    "@sourceacademy/common-cse-machine": ">=0.3.0"
-    "@sourceacademy/conductor": ">=0.3.0"
-  checksum: 10c0/dbf3c9220bb35b2f10d46dcfd13e1c827931d9bb9fb41266eff512d5859ab7734e594cda3b0e741a9896e8f7a3598cdb4d914ef13b7ecce941f8fc1798d8965e
+    "@sourceacademy/common-cse-machine": ">=0.5.0"
+    "@sourceacademy/conductor": ^0.8.0
+  checksum: 10c0/1cca98ae6dcb56caecf5d0fa88b0e808c72b05a58d0de9d238d43079efbd6143cd8fd8fc14494718785a7a19bb98a6f899eb40caa888ec3c6d1dc94dd1700a60
   languageName: node
   linkType: hard
 

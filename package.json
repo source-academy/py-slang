@@ -84,7 +84,7 @@
     "@sourceacademy/conductor": "^0.8.3",
     "@sourceacademy/pynter-wasm": "^0.3.0",
     "@sourceacademy/runner-autocomplete": "^0.0.2",
-    "@sourceacademy/runner-cse-machine": "^3.0.0",
+    "@sourceacademy/runner-cse-machine": "^3.1.0",
     "@sourceacademy/runner-data-visualizer": "^0.0.1",
     "@sourceacademy/runner-e-stepper": "^0.0.2",
     "@sourceacademy/runner-module-loader": "^0.0.1",

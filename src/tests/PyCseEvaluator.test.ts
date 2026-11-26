@@ -13,6 +13,7 @@
  * through more than one evaluateChunk() call.
  */
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { CSE_STEP_CAP } from "../conductor/runConfig";
 import {
   PyCseEvaluator1,
   PyCseEvaluator2,
@@ -21,8 +22,8 @@ import {
 } from "../conductor/PyCseEvaluator";
 
 /** Minimal IRunnerPlugin mock. PyCseEvaluatorBase's constructor unconditionally registers
- * CseMachinePlugin (used by evaluateChunk via `this.csePlugin.sendSnapshots(...)`, without
- * optional chaining, once variant >= 3) and the autocomplete plugin, plus - for variant >= 2 -
+ * CseMachinePlugin (used by evaluateChunk via `this.csePlugin.sendBatch(...)` and `endRun(...)`,
+ * without optional chaining, once variant >= 3) and the autocomplete plugin, plus - for variant >= 2 -
  * PythonDataVisualizerRunnerPlugin (used via `this.dataVisualizerPlugin?.resetRun()`). One
  * generic stub covers every registerPlugin call: only the methods each plugin path actually
  * invokes need to exist. */
@@ -30,17 +31,37 @@ function makeMockConductor(files: Record<string, string> = {}) {
   const results: unknown[] = [];
   const errors: unknown[] = [];
   const outputs: string[] = [];
+  // The snapshots reach the plugin in batches while the run goes on, and the run is ended with
+  // `endRun`. `sendSnapshots` is that run as a whole, called once when it ends with all its
+  // snapshots and breakpoint steps (and how it ended), which is what most tests look at.
   const sendSnapshots = jest.fn();
+  const batches: { snapshots: unknown[]; breakpointSteps: number[] }[] = [];
+  const ends: unknown[] = [];
+  let run: { snapshots: unknown[]; breakpointSteps: number[] }[] = [];
+  const sendBatch = jest.fn((snapshots: unknown[], breakpointSteps: number[] = []) => {
+    const batch = { snapshots, breakpointSteps };
+    batches.push(batch);
+    run.push(batch);
+  });
+  const endRun = jest.fn((end: unknown) => {
+    ends.push(end);
+    sendSnapshots(
+      run.flatMap(batch => batch.snapshots),
+      run.flatMap(batch => batch.breakpointSteps),
+      end,
+    );
+    run = [];
+  });
   const resetRun = jest.fn().mockResolvedValue(undefined);
   const conductor = {
     requestFile: (name: string) => Promise.resolve(files[name]),
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
-    registerPlugin: () => ({ sendSnapshots, resetRun }),
+    registerPlugin: () => ({ sendBatch, endRun, resetRun }),
     hostLoadPlugin: () => Promise.resolve(),
   } as unknown as IRunnerPlugin;
-  return { conductor, results, errors, outputs, sendSnapshots };
+  return { conductor, results, errors, outputs, sendSnapshots, batches, ends };
 }
 
 describe("PyCseEvaluator1 (chapter 1, no CSE snapshots)", () => {
@@ -200,6 +221,67 @@ describe("PyCseEvaluator3/4 (CSE snapshots)", () => {
 // smoke tests exist to confirm chapter selection works end to end through
 // the real evaluateChunk() path - not to re-litigate what each chapter
 // allows (see src/validator/sublanguages.ts for that).
+describe("PyCseEvaluator3/4 (streaming)", () => {
+  const LOOP = (n: number) => `i = 0\nwhile i < ${n}:\n    i = i + 1\n`;
+  const config = (stepLimit: number): Record<string, string> => ({
+    "/__cse_config__": JSON.stringify({ stepLimit }),
+  });
+
+  test("the snapshots go out in batches while the run goes on, and the run ends complete", async () => {
+    const { conductor, batches, ends, errors } = makeMockConductor();
+    await new PyCseEvaluator3(conductor).evaluateChunk(LOOP(30));
+
+    expect(errors).toEqual([]);
+    expect(batches.length).toBeGreaterThan(1);
+    for (const batch of batches.slice(0, -1)) expect(batch.snapshots).toHaveLength(25);
+    expect(ends).toEqual([{ status: "complete" }]);
+  });
+
+  test("without a host limit, a long run is cut off at the machine's own cap, and says why", async () => {
+    const { conductor, batches, ends } = makeMockConductor();
+    await new PyCseEvaluator3(conductor).evaluateChunk(LOOP(100000));
+
+    // The slider counts steps taken, from 0: its right end is the cap, one less than the snapshots.
+    expect(batches.flatMap(batch => batch.snapshots)).toHaveLength(CSE_STEP_CAP + 1);
+    expect(ends).toEqual([
+      { status: "cut-off", reason: `the limit of ${CSE_STEP_CAP} steps was reached` },
+    ]);
+  });
+
+  test("the host's limit caps what is sent, and the run says that it was cut off by it", async () => {
+    const { conductor, batches, ends } = makeMockConductor(config(12));
+    await new PyCseEvaluator3(conductor).evaluateChunk(LOOP(100000));
+
+    expect(batches.flatMap(batch => batch.snapshots)).toHaveLength(13);
+    expect(ends).toEqual([{ status: "cut-off", reason: "the limit of 12 steps was reached" }]);
+  });
+
+  test("a host limit above the cap does not raise it", async () => {
+    const { conductor, batches } = makeMockConductor(config(10 * CSE_STEP_CAP));
+    await new PyCseEvaluator3(conductor).evaluateChunk(LOOP(100000));
+
+    expect(batches.flatMap(batch => batch.snapshots)).toHaveLength(CSE_STEP_CAP + 1);
+  });
+
+  test("a program that fails keeps the steps up to the failure, ends the run, and reports the error", async () => {
+    const { conductor, batches, ends, errors } = makeMockConductor();
+    await new PyCseEvaluator3(conductor).evaluateChunk(`${LOOP(40)}1 / 0\n`);
+
+    expect(batches.flatMap(batch => batch.snapshots).length).toBeGreaterThan(25);
+    expect(ends).toEqual([{ status: "complete" }]);
+    expect(errors).toHaveLength(1);
+  });
+
+  test("each chunk is a run of its own, ended once", async () => {
+    const { conductor, ends } = makeMockConductor();
+    const evaluator = new PyCseEvaluator3(conductor);
+    await evaluator.evaluateChunk("x = 1\n");
+    await evaluator.evaluateChunk("y = x + 1\n");
+
+    expect(ends).toEqual([{ status: "complete" }, { status: "complete" }]);
+  });
+});
+
 describe("PyCseEvaluator1..4 (chapter selection)", () => {
   test("chapter 1: list literals are rejected by the chapter's validators", async () => {
     const { conductor, errors } = makeMockConductor();
