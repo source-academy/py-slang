@@ -1,3 +1,4 @@
+import type { CseTraceEnd } from "@sourceacademy/common-cse-machine";
 import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
@@ -32,7 +33,7 @@ import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandle
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import type { BeforeValidation } from "./typed";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
-import { fetchRunConfig } from "./runConfig";
+import { CSE_STEP_CAP, fetchRunConfig } from "./runConfig";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -166,20 +167,35 @@ export abstract class PyCseEvaluatorBase extends BasicEvaluator {
         const config = await fetchRunConfig(this.conductor);
         // The CSE tab's slider counts steps taken, from 0 (the first snapshot): its right end is
         // one less than the number of snapshots, and must reach the step limit.
-        const maxSnapshots = (config.stepLimit ?? 1000) + 1;
+        // The lower of the host's limit, while it still sends one, and the machine's own cap.
+        const maxSnapshots = Math.min(config.stepLimit ?? CSE_STEP_CAP, CSE_STEP_CAP) + 1;
         markBreakpoints(ast, config.breakpointLines ?? []);
 
-        const { snapshots, breakpointSteps } = await collectSnapshots(
-          this.context,
-          control,
-          stash,
-          -1,
-          this.variant,
-          script,
-          maxSnapshots,
-        );
+        // The snapshots go to the host while the machine runs, so that a run that is stopped, or
+        // whose program fails, leaves the ones so far. The trace is complete unless the cap cut it
+        // off; a program that fails ends it where it failed, and its error is reported below.
+        let end: CseTraceEnd = { status: "complete" };
+        try {
+          const { cutOff } = await collectSnapshots(
+            this.context,
+            control,
+            stash,
+            -1,
+            this.variant,
+            script,
+            maxSnapshots,
+            (snapshots, breakpointSteps) => this.csePlugin.sendBatch(snapshots, breakpointSteps),
+          );
+          if (cutOff) {
+            end = {
+              status: "cut-off",
+              reason: `the limit of ${maxSnapshots - 1} steps was reached`,
+            };
+          }
+        } finally {
+          this.csePlugin.endRun(end);
+        }
         flushOutput(this.conductor);
-        this.csePlugin.sendSnapshots(snapshots, breakpointSteps);
       } else {
         await collectSnapshots(this.context, control, stash, -1, this.variant, script, 0);
         flushOutput(this.conductor);

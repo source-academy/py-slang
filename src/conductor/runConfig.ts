@@ -40,6 +40,17 @@ export const STEPPER_STEP_CAP = 3000;
  */
 export const E_STEPPER_STEP_CAP = 2000;
 
+/**
+ * The most steps that the CSE machine records in a run, as a safety net and not a setting: a
+ * snapshot holds the control, the stash and the environments, which grow with the recursion or the
+ * data, so the size of a run grows faster than its number of steps (measured for
+ * `def f(n): return 0 if n == 0 else 1 + f(n - 1)` called with 100000: 1000 snapshots are 11 MB once
+ * serialised, 2500 are 68 MB, 5000 are 268 MB; a loop of constant size is under 4 MB at 5000). A
+ * student who wants to see less presses Stop, and the snapshots so far are kept. The host's
+ * `stepLimit`, while it still sends one, is a lower cap.
+ */
+export const CSE_STEP_CAP = 2500;
+
 /** Fetches and parses `/__cse_config__`. Malformed JSON or a missing file both fall back to `{}`
  * (every field optional, so callers apply their own defaults) rather than failing the run. */
 export async function fetchRunConfig(conductor: IRunnerPlugin): Promise<RunConfig> {

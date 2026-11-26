@@ -47,7 +47,9 @@ describe("Python §4 Typed on the CSE machine", () => {
   function cse() {
     const snapshots: unknown[] = [];
     const { conductor, errors, outputs } = mockConductor({
-      sendSnapshots: (s: unknown) => snapshots.push(s),
+      // One entry for each run that was sent (a run ends with `endRun`).
+      sendBatch: () => undefined,
+      endRun: (end: unknown) => snapshots.push(end),
       // Chapter 2 and up register the data visualizer too.
       resetRun: () => undefined,
       sendRun: () => undefined,

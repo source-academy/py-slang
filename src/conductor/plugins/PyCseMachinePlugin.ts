@@ -645,6 +645,24 @@ function serializeEnvChain(
 
 // ── Snapshot collection ───────────────────────────────────────────────────────
 
+/** How many snapshots go into a batch that is passed on while the run goes on. A snapshot holds the
+ * control, the stash and the environments, which can be large (see `CSE_STEP_CAP`), so not too many. */
+export const SNAPSHOTS_PER_BATCH = 25;
+
+export interface CollectedSnapshots {
+  snapshots: CseSnapshot[];
+  breakpointSteps: number[];
+  /** Whether the run was cut off by `maxSnapshots`, with the machine still having steps to take. */
+  cutOff: boolean;
+}
+
+/**
+ * Runs the machine to completion or to `maxSnapshots`, whichever comes first, collecting a snapshot
+ * of each step. `onBatch`, if given, is called with the next snapshots (and the breakpoint steps
+ * among them) every {@link SNAPSHOTS_PER_BATCH} snapshots, and with the rest when the run ends or
+ * fails, so that a caller can pass them on while the machine is still running; the result has all
+ * of them regardless.
+ */
 export async function collectSnapshots(
   context: Context,
   control: Control,
@@ -653,7 +671,8 @@ export async function collectSnapshots(
   variant: number,
   code: string,
   maxSnapshots: number = 1000,
-): Promise<{ snapshots: CseSnapshot[]; breakpointSteps: number[] }> {
+  onBatch?: (snapshots: CseSnapshot[], breakpointSteps: number[]) => void,
+): Promise<CollectedSnapshots> {
   const snapshots: CseSnapshot[] = [];
   // Runtime-fabricated nodes (e.g. implicit range() bounds, the for-loop increment —
   // see utils.ts's evaluateForIterator/generateForIncrement) carry tokens pinned to
@@ -677,47 +696,81 @@ export async function collectSnapshots(
     false,
   );
 
-  for await (const { stash: s, control: c, steps } of stream) {
-    // maxSnapshots === 0 → run the program to completion (for stdout/errors) but
-    // collect nothing. Used for chapters where the CSE machine is disabled.
-    if (maxSnapshots === 0) continue;
-    if (snapshots.length >= maxSnapshots) break;
+  // What has not yet gone to `onBatch`. The interpreter records the breakpoint of a snapshot while
+  // it takes the *next* step (`breakpointSteps.push(steps - 1)`), so when a batch ends, the
+  // breakpoint of its last snapshot is not there yet: a batch carries the breakpoint steps below its
+  // last snapshot, and the rest go with the next batch, or with the end of the run.
+  let sentSnapshots = 0;
+  let sentBreakpoints = 0;
+  const flush = (end: boolean): void => {
+    if (!onBatch) return;
+    if (sentSnapshots === snapshots.length && !end) return;
+    const below = end ? snapshots.length : snapshots.length - 1;
+    const recorded = context.runtime.breakpointSteps;
+    let upTo = sentBreakpoints;
+    while (upTo < recorded.length && recorded[upTo] < below) upTo++;
+    const fresh = snapshots.slice(sentSnapshots);
+    const freshBreakpoints = recorded.slice(sentBreakpoints, upTo);
+    if (fresh.length === 0 && freshBreakpoints.length === 0) return;
+    onBatch(fresh, freshBreakpoints);
+    sentSnapshots = snapshots.length;
+    sentBreakpoints = upTo;
+  };
 
-    const activeEnv = context.runtime.environments[0];
-    const rawControlStack = c.getStack() as unknown as ControlStackItem[];
-    const controlItems = rawControlStack
-      .slice()
-      .reverse()
-      .map(item => serializeControlItem(item, code));
-    const stashItems = s
-      .getStack()
-      .slice()
-      .reverse()
-      .map(sv => serializeValue(sv, activeEnv.id, { code }));
-    const environments = serializeEnvChain(
-      context.runtime.environments,
-      s.getStack(),
-      rawControlStack,
-      activeEnv,
-      { code },
-    );
+  let cutOff = false;
+  try {
+    for await (const { stash: s, control: c, steps } of stream) {
+      // maxSnapshots === 0 → run the program to completion (for stdout/errors) but
+      // collect nothing. Used for chapters where the CSE machine is disabled.
+      if (maxSnapshots === 0) continue;
+      if (snapshots.length >= maxSnapshots) {
+        cutOff = true;
+        break;
+      }
 
-    // The node most recently evaluated at this step. Mirrors the non-conductor CSE
-    // machine's updateInspector, which reads context.runtime.nodes[0] for the blue
-    // "current line" highlight. py-slang nodes carry a 1-based startToken.line.
-    const currentNode = context.runtime.nodes[0] as { startToken?: { line?: number } } | undefined;
-    const rawLine = currentNode?.startToken?.line;
-    if (rawLine) {
-      lastKnownLine = rawLine;
+      const activeEnv = context.runtime.environments[0];
+      const rawControlStack = c.getStack() as unknown as ControlStackItem[];
+      const controlItems = rawControlStack
+        .slice()
+        .reverse()
+        .map(item => serializeControlItem(item, code));
+      const stashItems = s
+        .getStack()
+        .slice()
+        .reverse()
+        .map(sv => serializeValue(sv, activeEnv.id, { code }));
+      const environments = serializeEnvChain(
+        context.runtime.environments,
+        s.getStack(),
+        rawControlStack,
+        activeEnv,
+        { code },
+      );
+
+      // The node most recently evaluated at this step. Mirrors the non-conductor CSE
+      // machine's updateInspector, which reads context.runtime.nodes[0] for the blue
+      // "current line" highlight. py-slang nodes carry a 1-based startToken.line.
+      const currentNode = context.runtime.nodes[0] as
+        | { startToken?: { line?: number } }
+        | undefined;
+      const rawLine = currentNode?.startToken?.line;
+      if (rawLine) {
+        lastKnownLine = rawLine;
+      }
+
+      snapshots.push({
+        stepIndex: steps - 1,
+        control: controlItems,
+        stash: stashItems,
+        environments,
+        currentLine: lastKnownLine,
+      });
+      if (snapshots.length - sentSnapshots >= SNAPSHOTS_PER_BATCH) flush(false);
     }
-
-    snapshots.push({
-      stepIndex: steps - 1,
-      control: controlItems,
-      stash: stashItems,
-      environments,
-      currentLine: lastKnownLine,
-    });
+  } finally {
+    // The snapshots so far go on even if the program fails in the middle: a runtime error ends the
+    // run, and the steps up to it are the part worth seeing.
+    flush(true);
   }
 
   // context.runtime.breakpointSteps is recorded by the interpreter regardless of the
@@ -725,7 +778,7 @@ export async function collectSnapshots(
   // host never gets pointed at a step with no corresponding snapshot.
   const breakpointSteps = context.runtime.breakpointSteps.filter(step => step < snapshots.length);
 
-  return { snapshots, breakpointSteps };
+  return { snapshots, breakpointSteps, cutOff };
 }
 
 // The runner-side plugin that transports these snapshots now lives in
