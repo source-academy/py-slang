@@ -29,6 +29,17 @@ export interface RunConfig {
  */
 export const STEPPER_STEP_CAP = 3000;
 
+/**
+ * The most steps that the E-Stepper records in a run, as a safety net and not a setting. Its steps
+ * hold the store (frames and heap) besides the program, so they are larger than the Stepper's, and
+ * their size grows faster than their number for a recursive program or one that builds a long list
+ * (measured for `def f(n): return 0 if n == 0 else 1 + f(n - 1)` called with 100000: 1000 steps are
+ * 26 MB once serialised, 2500 are 156 MB, and 5000 do not fit in a worker). A run is also ended by
+ * the memory guard of `estepper/getSteps.ts` before that, where the host reports the heap. The
+ * host's `stepLimit`, while it still sends one, is a lower cap.
+ */
+export const E_STEPPER_STEP_CAP = 2000;
+
 /** Fetches and parses `/__cse_config__`. Malformed JSON or a missing file both fall back to `{}`
  * (every field optional, so callers apply their own defaults) rather than failing the run. */
 export async function fetchRunConfig(conductor: IRunnerPlugin): Promise<RunConfig> {

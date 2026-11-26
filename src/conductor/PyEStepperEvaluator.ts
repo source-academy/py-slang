@@ -9,7 +9,7 @@ import { StaticTypeErrors } from "../typecheck/errors";
 import { checkEStepperProgram, EStepperProgramError } from "./estepper/getSteps";
 import { PyEStepperRunnerPlugin } from "./estepper/PyEStepperRunnerPlugin";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
-import { fetchRunConfig } from "./runConfig";
+import { E_STEPPER_STEP_CAP, fetchRunConfig } from "./runConfig";
 import { sendStaticTypeErrors } from "./staticTypeErrors";
 import type { BeforeValidation } from "./typed";
 
@@ -62,7 +62,10 @@ export abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
       const config = await fetchRunConfig(this.conductor);
       // The gutter's breakpoints are stops for the host's breakpoint navigation, like `breakpoint()`.
       markBreakpoints(ast, config.breakpointLines ?? []);
-      if (config.stepLimit !== undefined) this.eStepper.setStepLimit(config.stepLimit);
+      // The lower of the host's limit, while it still sends one, and the e-stepper's own cap.
+      this.eStepper.setStepLimit(
+        Math.min(config.stepLimit ?? E_STEPPER_STEP_CAP, E_STEPPER_STEP_CAP),
+      );
       try {
         await checkEStepperProgram(ast, script, this.chapter);
       } catch (error) {

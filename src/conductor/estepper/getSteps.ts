@@ -82,18 +82,24 @@ export function shortErrorMessage(error: unknown): string {
  * could not be handled is not drawn: the last step stands in for it.
  */
 function endWithRecursionError(steps: Step[]): void {
-  const last = steps[steps.length - 1];
-  const stuck = (explanation: string, redexType?: "beforeMarker"): Step => {
+  steps.push(...recursionEndSteps(steps[steps.length - 1], steps.length));
+}
+
+/** The two steps that end a run with a `RecursionError`, after `last`, the step at `index - 1`. */
+function recursionEndSteps(last: Step, index: number): Step[] {
+  const stuck = (n: number, explanation: string, redexType?: "beforeMarker"): Step => {
     const step: Step = {
       ...last,
       markers: [redexType ? { explanation, redexType } : { explanation }],
-      cse: last.cse && { ...last.cse, stepIndex: steps.length },
+      cse: last.cse && { ...last.cse, stepIndex: n },
     };
     delete step.lookups;
     return step;
   };
-  steps.push(stuck(RECURSION_ERROR_MESSAGE, "beforeMarker"));
-  steps.push(stuck("Evaluation stuck"));
+  return [
+    stuck(index, RECURSION_ERROR_MESSAGE, "beforeMarker"),
+    stuck(index + 1, "Evaluation stuck"),
+  ];
 }
 
 /** How deeply objects and arrays are nested in a JSON value (a step has hundreds of thousands). */
@@ -231,18 +237,25 @@ export async function checkEStepperProgram(
   await prepare(fileInput, code, chapter);
 }
 
+/** How a run of {@link runEStepperSteps} ended, once its last step has been produced. */
+export type EStepperEnd = Omit<EStepperRun, "steps">;
+
 /**
- * Runs a program on the e-stepper. `requestInput` is how `input()` asks the user for a line; when
- * it is absent (the CLI, tests), `input()` stops evaluation with an error.
+ * Runs a program on the e-stepper, one step at a time as they are made, so that a caller can pass
+ * the steps on while a long run is going (and keep those it had if the run is stopped). Steps are
+ * given in whole contractions (a before and its after step), so none is given that the run then
+ * takes back (see the stack overflow below). The generator returns how the run ended;
+ * {@link runEStepper} collects the steps. `requestInput` is how `input()` asks the user for a
+ * line; when it is absent (the CLI, tests), `input()` stops evaluation with an error.
  */
-export async function runEStepper(
+export async function* runEStepperSteps(
   fileInput: StmtNS.FileInput,
   code: string,
   chapter: number,
   stepLimit = DEFAULT_STEP_LIMIT,
   requestInput?: RequestInput,
   limits: MemoryLimits = {},
-): Promise<EStepperRun> {
+): AsyncGenerator<Step, EStepperEnd> {
   const machine = await prepare(fileInput, code, chapter, requestInput);
   machine.maxUnreachable = unreachableLimit(stepLimit);
   // The memory of the run: the heap against the limit the host reports, or else the size of the
@@ -259,6 +272,13 @@ export async function runEStepper(
   let program: Stmt[] = translateStmts(fileInput.statements);
   const steps: Step[] = [];
   let size = 0;
+  // The steps from here on have not been given yet.
+  let given = 0;
+  const unGiven = (): Step[] => {
+    const fresh = steps.slice(given);
+    given = steps.length;
+    return fresh;
+  };
 
   const push = (
     prog: Stmt[],
@@ -307,6 +327,9 @@ export async function runEStepper(
     const contractionLimit = Math.max(0, Math.floor((stepLimit - 1) / 2));
     for (let n = 0; ; n++) {
       complete = steps.length;
+      // Everything up to here is whole: a contraction that overflows the stack, below, is cut off
+      // back to this point, so nothing after it has been given.
+      yield* unGiven();
       if (n === contractionLimit || outOfMemory(n)) {
         const byMemory = n !== contractionLimit;
         push(program, snapshotStore(machine, program), machine.output, {
@@ -314,8 +337,8 @@ export async function runEStepper(
             ? "Maximum size of the steps exceeded: they use too much memory"
             : "Maximum number of steps exceeded",
         });
+        yield* unGiven();
         return {
-          steps,
           output: machine.output,
           truncated: true,
           truncatedBy: byMemory ? "memory" : "steps",
@@ -337,13 +360,15 @@ export async function runEStepper(
         push(program, snapshotStore(machine, program), machine.output, {
           explanation: "Evaluation stuck",
         });
-        return { steps, output: machine.output, error: message, truncated: false };
+        yield* unGiven();
+        return { output: machine.output, error: message, truncated: false };
       }
       if (outcome.kind !== "step") {
         push(program, storeBefore, outputBefore, {
           explanation: outcome.kind === "end" ? "Evaluation complete" : "Evaluation stuck",
         });
-        return { steps, output: machine.output, truncated: false };
+        yield* unGiven();
+        return { output: machine.output, truncated: false };
       }
       const lookups = machine.lookups.map(l => ({
         frameId: machine.labels.frame(l.env),
@@ -376,7 +401,154 @@ export async function runEStepper(
     // The last step that was made whole stands in for the term that could not be drawn.
     steps.length = complete;
     endWithRecursionError(steps);
-    return { steps, output: machine.output, error: RECURSION_ERROR_MESSAGE, truncated: false };
+    yield* unGiven();
+    return { output: machine.output, error: RECURSION_ERROR_MESSAGE, truncated: false };
+  }
+}
+
+/**
+ * Runs a program on the e-stepper. The steps of {@link runEStepperSteps}, collected.
+ */
+export async function runEStepper(
+  fileInput: StmtNS.FileInput,
+  code: string,
+  chapter: number,
+  stepLimit = DEFAULT_STEP_LIMIT,
+  requestInput?: RequestInput,
+  limits: MemoryLimits = {},
+): Promise<EStepperRun> {
+  const steps: Step[] = [];
+  const run = runEStepperSteps(fileInput, code, chapter, stepLimit, requestInput, limits);
+  let next = await run.next();
+  for (; !next.done; next = await run.next()) steps.push(next.value);
+  return { steps, ...next.value };
+}
+
+/** How many steps go into a batch that is passed on while the run goes on. A step holds the whole
+ * program and the store, which can be large (see `E_STEPPER_STEP_CAP`), so not too many. */
+export const STEPS_PER_BATCH = 25;
+
+/**
+ * {@link sendableSteps} for steps that go out in batches while the run goes on: it says how many of
+ * the leading steps of a batch can be sent, on the same ground (what the stack can copy depends on
+ * the depth of the term alone), and remembers the deepest depth that has been seen to fit, so that
+ * a batch no deeper than that needs no try. A batch that is deeper tries its deepest step (nearly
+ * always the only try) and otherwise finds the depth that fits by halving the depths.
+ */
+export class SendGuard {
+  private readonly channel: MessageChannel | undefined;
+  private readonly send: ((message: unknown) => void) | undefined;
+  /** The deepest depth that has been sent, or tried and found to fit. */
+  private fitsDepth = -1;
+
+  constructor(post?: (message: unknown) => void) {
+    this.channel = !post && typeof MessageChannel === "function" ? new MessageChannel() : undefined;
+    const channel = this.channel;
+    this.send = post ?? (channel && ((message: unknown) => channel.port1.postMessage(message)));
+  }
+
+  /** How many of the leading steps of `batch` can be sent. */
+  admit(batch: Step[]): number {
+    if (!this.send || batch.length === 0) return batch.length;
+    const depths = batch.map(nestingDepth);
+    const deepest = Math.max(...depths);
+    if (deepest <= this.fitsDepth) return batch.length;
+    const firstOfDepth = new Map<number, number>();
+    depths.forEach((depth, i) => {
+      if (depth > this.fitsDepth && !firstOfDepth.has(depth)) firstOfDepth.set(depth, i);
+    });
+    const distinct = [...firstOfDepth.keys()].sort((a, b) => a - b);
+    const unrelated = new Error("A failure of the copy that is not a stack overflow");
+    const fits = (depth: number): boolean => {
+      try {
+        this.send?.({ type: "steps", steps: [batch[firstOfDepth.get(depth)!]] });
+        return true;
+      } catch (error) {
+        if (isStackOverflow(error)) return false;
+        throw unrelated; // (the send reports it)
+      }
+    };
+    try {
+      if (fits(distinct[distinct.length - 1])) {
+        this.fitsDepth = deepest;
+        return batch.length;
+      }
+      // The deepest depth that fits (none, if the shallowest does not): `lo` fits, `hi` does not.
+      let lo = -1;
+      let hi = distinct.length - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (fits(distinct[mid])) lo = mid;
+        else hi = mid;
+      }
+      const limit = lo >= 0 ? distinct[lo] : this.fitsDepth;
+      this.fitsDepth = Math.max(this.fitsDepth, limit);
+      return depths.findIndex(depth => depth > limit);
+    } catch (error) {
+      if (error === unrelated) return batch.length;
+      throw error;
+    }
+  }
+
+  close(): void {
+    this.channel?.port1.close();
+    this.channel?.port2.close();
+  }
+}
+
+/**
+ * The steps of a program in batches, as they are made, for the runner plugin: the steps of
+ * {@link runEStepperSteps} in batches of {@link STEPS_PER_BATCH}, each as far as it can be sent (see
+ * {@link SendGuard}), and the run ends at the last step that can, with a `RecursionError`, as
+ * {@link sendableSteps} ends a run that is sent whole. Returns how the run ended.
+ *
+ * One case differs from {@link sendableSteps}: when the very first step is too deep to send, that
+ * one cannot stand in for the run (a later step may fit, but is not known yet), so the run fails
+ * with the `RecursionError` instead.
+ */
+export async function* getEStepperStepBatches(
+  fileInput: StmtNS.FileInput,
+  code: string,
+  chapter: number,
+  stepLimit = DEFAULT_STEP_LIMIT,
+  requestInput?: RequestInput,
+  limits: MemoryLimits = {},
+  post?: (message: unknown) => void,
+): AsyncGenerator<Step[], EStepperEnd> {
+  const run = runEStepperSteps(fileInput, code, chapter, stepLimit, requestInput, limits);
+  const guard = new SendGuard(post);
+  let sent = 0;
+  let last: Step | undefined;
+  /** What to send of `batch`; undefined if the run has to end before its end. */
+  const admitted = (batch: Step[]): { send: Step[]; cutOff: boolean } => {
+    const fit = guard.admit(batch);
+    return { send: batch.slice(0, fit), cutOff: fit < batch.length };
+  };
+  try {
+    let batch: Step[] = [];
+    for (let next = await run.next(); ; next = await run.next()) {
+      const done = next.done === true;
+      if (!done) batch.push(next.value as Step);
+      if (done || batch.length >= STEPS_PER_BATCH) {
+        const { send, cutOff } = admitted(batch);
+        if (send.length > 0) {
+          yield send;
+          sent += send.length;
+          last = send[send.length - 1];
+        }
+        if (cutOff) {
+          // The run ends where the steps can no longer be sent, and the machine need not go on.
+          await run.return(undefined as never);
+          if (!last) throw new Error(RECURSION_ERROR_MESSAGE);
+          yield recursionEndSteps(last, sent);
+          return { output: "", error: RECURSION_ERROR_MESSAGE, truncated: false };
+        }
+        batch = [];
+        if (done) return next.value as EStepperEnd;
+      }
+    }
+  } finally {
+    guard.close();
   }
 }
 
