@@ -13,6 +13,7 @@ import type { IChannel, IConduit } from "@sourceacademy/conductor/conduit";
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 
 import { PyStepperEvaluator1, PyStepperEvaluator2 } from "../conductor/PyStepperEvaluator";
+import { STEPPER_STEP_CAP } from "../conductor/runConfig";
 import { PythonStepperRunnerPlugin } from "../conductor/stepper/PyStepperRunnerPlugin";
 
 /** A minimal, non-functional IChannel — PythonStepperRunnerPlugin only needs one to exist to
@@ -65,6 +66,14 @@ function makeMockConductor(stepLimit?: number) {
   return { conductor, results, errors, sent };
 }
 
+/** The steps that the runner sent, batch by batch (what a host that applies them in order has). */
+function stepsSent(sent: unknown[]): { markers?: unknown[] }[] {
+  return sent.flatMap(message => {
+    const m = message as { type: string; steps?: { markers?: unknown[] }[] };
+    return m.type === "batch" || m.type === "steps" ? (m.steps ?? []) : [];
+  });
+}
+
 describe("PyStepperEvaluator1", () => {
   test("a script's result is always undefined, exec-mode style, even for a bare expression (py-slang#421)", async () => {
     const { conductor, results, errors } = makeMockConductor();
@@ -96,31 +105,45 @@ describe("PyStepperEvaluator1", () => {
     expect(errors).toHaveLength(1);
   });
 
-  test("the host-configured stepLimit (the frontend's Step Limit control) is applied, not the 1000 default", async () => {
+  test("the host-configured stepLimit (the frontend's Step Limit control) is applied, not the stepper's own cap", async () => {
     const { conductor, sent } = makeMockConductor(3);
     const evaluator = new PyStepperEvaluator1(conductor);
 
     // §1 has no while loops (see preprocessPython), so use non-terminating recursion instead.
     await evaluator.evaluateChunk("def f(x):\n  return f(x)\nf(1)\n");
 
-    const stepsMessage = sent.find(m => m.type === "steps") as { steps: { markers: unknown[] }[] };
-    const explanations = stepsMessage.steps.flatMap(s =>
+    const steps = stepsSent(sent);
+    const explanations = steps.flatMap(s =>
       ((s.markers ?? []) as { explanation?: string }[]).map(m => m.explanation),
     );
     expect(explanations).toContain("Maximum number of steps exceeded");
-    // A stepLimit of 3 must produce far fewer steps than the 1000 default would for the same
+    // A stepLimit of 3 must produce far fewer steps than the cap would for the same
     // non-terminating loop — confirms the host's value actually reached the stepper.
-    expect(stepsMessage.steps.length).toBeLessThan(10);
+    expect(steps.length).toBeLessThan(10);
   });
 
-  test("with no host config, the stepper falls back to its own default step limit", async () => {
+  test("with no host config, the stepper's own cap applies, and the trace ends cut off", async () => {
     const { conductor, sent } = makeMockConductor();
     const evaluator = new PyStepperEvaluator1(conductor);
 
     await evaluator.evaluateChunk("def f(x):\n  return f(x)\nf(1)\n");
 
-    const stepsMessage = sent.find(m => m.type === "steps") as { steps: unknown[] };
-    expect(stepsMessage.steps.length).toBeGreaterThan(10);
+    // More than the 1000 that was the default before the cap, and no more than the cap.
+    const steps = stepsSent(sent);
+    expect(steps.length).toBeGreaterThan(1000);
+    expect(steps.length).toBeLessThanOrEqual(STEPPER_STEP_CAP);
+    const last = sent[sent.length - 1] as { type: string; end?: { status: string } };
+    expect(last.type).toBe("batch");
+    expect(last.end?.status).toBe("cut-off");
+  });
+
+  test("a host limit above the cap does not raise it", async () => {
+    const { conductor, sent } = makeMockConductor(10 * STEPPER_STEP_CAP);
+    const evaluator = new PyStepperEvaluator1(conductor);
+
+    await evaluator.evaluateChunk("def f(x):\n  return f(x)\nf(1)\n");
+
+    expect(stepsSent(sent).length).toBeLessThanOrEqual(STEPPER_STEP_CAP);
   });
 });
 

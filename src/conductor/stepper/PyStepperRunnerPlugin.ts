@@ -2,16 +2,16 @@ import type {
   SerializedStepperStep,
   StepperMessage,
   SyntaxProfile,
+  TraceEnd,
 } from "@sourceacademy/common-stepper";
 import type { IChannel, IConduit } from "@sourceacademy/conductor/conduit";
-import { BaseStepperRunnerPlugin } from "@sourceacademy/runner-stepper";
+import { BaseStepperRunnerPlugin, type StepBatches } from "@sourceacademy/runner-stepper";
 
 import type { StmtNS } from "../../ast-types";
+import { STEPPER_STEP_CAP } from "../runConfig";
 import type { StepperContext } from "./context";
-import { getPythonSteps } from "./getSteps";
+import { getPythonStepBatches, getPythonSteps } from "./getSteps";
 import { pythonSyntaxProfile } from "./syntaxProfile";
-
-const DEFAULT_STEP_LIMIT = 1000;
 
 /**
  * The py-slang (Python) binding of the language-agnostic stepper runner.
@@ -33,7 +33,7 @@ export class PythonStepperRunnerPlugin extends BaseStepperRunnerPlugin<StmtNS.Fi
     conduit: IConduit,
     channels: IChannel<StepperMessage>[],
     context: StepperContext = {},
-    stepLimit: number = DEFAULT_STEP_LIMIT,
+    stepLimit: number = STEPPER_STEP_CAP,
   ) {
     super(conduit, channels);
     this.context = context;
@@ -48,6 +48,21 @@ export class PythonStepperRunnerPlugin extends BaseStepperRunnerPlugin<StmtNS.Fi
 
   getSteps(ast: StmtNS.FileInput): Promise<SerializedStepperStep[]> {
     return getPythonSteps(ast, this.stepLimit, this.context);
+  }
+
+  /**
+   * The steps in batches, as they are reduced, so that the host has the steps so far if the run is
+   * stopped, or never finishes (the host stops a run by terminating the worker). The trace ends as
+   * cut off, with the reason, if the step limit was reached.
+   */
+  protected override getStepBatches(ast: StmtNS.FileInput): StepBatches {
+    const { stepLimit, context } = this;
+    return (async function* (): AsyncGenerator<SerializedStepperStep[], TraceEnd | undefined> {
+      const end = yield* getPythonStepBatches(ast, stepLimit, context);
+      return end.limitReached
+        ? { status: "cut-off", reason: `the limit of ${stepLimit} steps was reached` }
+        : undefined;
+    })();
   }
 
   /** Ships Python's rendering rules so the host displays Python syntax with no per-language host code. */

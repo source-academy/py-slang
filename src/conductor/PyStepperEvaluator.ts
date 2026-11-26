@@ -8,7 +8,7 @@ import { markBreakpoints } from "../breakpoints";
 import { parse } from "../parser";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
-import { fetchRunConfig } from "./runConfig";
+import { fetchRunConfig, STEPPER_STEP_CAP } from "./runConfig";
 import { preprocessPython } from "./stepper/preprocess";
 import { PythonStepperRunnerPlugin } from "./stepper/PyStepperRunnerPlugin";
 
@@ -94,9 +94,8 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
 
       const config = await fetchRunConfig(this.conductor);
       markBreakpoints(ast, config.breakpointLines ?? []);
-      if (config.stepLimit !== undefined) {
-        this.stepper.setStepLimit(config.stepLimit);
-      }
+      // The lower of the host's limit, while it still sends one, and the stepper's own cap.
+      this.stepper.setStepLimit(Math.min(config.stepLimit ?? STEPPER_STEP_CAP, STEPPER_STEP_CAP));
 
       // Preprocessing: reject an undefined variable as a (preprocessing) error and do NOT run the
       // stepper — a free name has no meaning in the substitution model. Mirrors Source's
