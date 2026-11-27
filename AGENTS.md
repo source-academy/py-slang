@@ -17,5 +17,6 @@ Use the scripts in `package.json`, not the tools directly.
 * Documentation comments only on exported API (`yarn jsdoc` builds the API documentation from them), one to three lines unless they state a contract.
 * A TODO links an issue: `TODO(#123): ...`.
 * When you change or delete code, fix or delete the comments about it.
-* Generated, never hand-edited: `src/parser/python-grammar.ts` (`yarn compile-grammar`), `docs/jsdoc` and `docs/lib` (`yarn jsdoc`).
+* Generated, never hand-edited: `src/parser/python-grammar.ts` (`yarn compile-grammar`) and `docs/python`, the output of `yarn jsdoc` (not committed).
+* Leave alone when cleaning up comments: the JSDoc template in `docs/jsdoc` (a vendored copy of JSDoc's default template), and `docs/lib`, the library definitions that `yarn jsdoc` reads: their comments are the API documentation, so keep them.
 * To clean up existing comments, follow the guide in the documentation repository: `../documentation/app/docs/contributing/comment-cleanup.md` in a sibling checkout, or <https://github.com/source-academy/documentation/blob/main/app/docs/contributing/comment-cleanup.md>.
