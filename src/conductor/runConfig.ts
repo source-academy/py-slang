@@ -1,7 +1,7 @@
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 
 /**
- * Per-run configuration the host serves via a virtual `/__cse_config__` file (fetched through
+ * Per-run configuration the host serves via a virtual `/__run_config__` file (fetched through
  * {@link IRunnerPlugin.requestFile}, the only generic inbound channel Conductor offers — there is
  * no dedicated message type for either of these in `@sourceacademy/conductor`).
  */
@@ -51,10 +51,17 @@ export const E_STEPPER_STEP_CAP = 2000;
  */
 export const CSE_STEP_CAP = 2500;
 
-/** Fetches and parses `/__cse_config__`. Malformed JSON or a missing file both fall back to `{}`
- * (every field optional, so callers apply their own defaults) rather than failing the run. */
+/** The file of the per-run settings. Hosts served it as `/__cse_config__` before the rename. */
+const RUN_CONFIG_FILE = "/__run_config__";
+const LEGACY_RUN_CONFIG_FILE = "/__cse_config__";
+
+/** Fetches and parses `/__run_config__`, or `/__cse_config__` from a host that has not been renamed
+ * yet. Malformed JSON or a missing file both fall back to `{}` (every field optional, so callers
+ * apply their own defaults) rather than failing the run. */
 export async function fetchRunConfig(conductor: IRunnerPlugin): Promise<RunConfig> {
-  const raw = await conductor.requestFile("/__cse_config__");
+  const raw =
+    (await conductor.requestFile(RUN_CONFIG_FILE)) ||
+    (await conductor.requestFile(LEGACY_RUN_CONFIG_FILE));
   if (!raw) return {};
   try {
     return JSON.parse(raw) as RunConfig;
