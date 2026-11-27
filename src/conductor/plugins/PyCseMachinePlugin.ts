@@ -249,7 +249,7 @@ function serializeValue(
   const base = { displayValue: formatValue(v), label: typeTranslator(v.type) };
   if (v.type === "closure" && ids.isLibrary?.(v.closure)) {
     const name = v.closure.node.kind === "FunctionDef" ? v.closure.node.name.lexeme : "lambda";
-    return { displayValue: name, label: typeTranslator("builtin") };
+    return { displayValue: name, label: typeTranslator("builtin"), metadata: { builtin: true } };
   }
   if (v.type === "closure") {
     const cl = v.closure;
@@ -310,6 +310,8 @@ function serializeValue(
       ids.objects?.(v),
     );
   }
+  // A built-in has no defining frame and no source (CseFunctionMetadata.builtin).
+  if (v.type === "builtin") return { ...base, metadata: { builtin: true } };
   return base;
 }
 
@@ -444,7 +446,8 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
   // Instructions have 'instrType'.
   if (item.instrType !== undefined) {
     if (item.instrType === InstrType.ENVIRONMENT && item.env?.id !== undefined) {
-      return { displayText: "ENVIRONMENT", metadata: { envId: item.env.id } };
+      // `instrType: "env"` is how the host takes it (CseEnvironmentInstructionMetadata).
+      return { displayText: "ENVIRONMENT", metadata: { instrType: "env", envId: item.env.id } };
     }
     const jsInstrType = PY_TO_JS_INSTR_TYPE[item.instrType as InstrType];
     const meta: Record<string, unknown> = {};
