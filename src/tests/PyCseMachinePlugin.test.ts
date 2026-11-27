@@ -190,6 +190,7 @@ describe("serializeValue", () => {
     expect(v.displayValue).toBe("<built-in function print>");
     expect(v.label).toBe("builtin_function_or_method");
     expect(v.label).not.toBe("function"); // "function" is what closures get
+    expect((v.metadata as any)?.builtin).toBe(true);
   });
 });
 
@@ -319,6 +320,7 @@ describe("serializeControlItem", () => {
     const result = serializeControlItem({ instrType: InstrType.ENVIRONMENT, env }, code);
     expect(result.displayText).toBe("ENVIRONMENT");
     expect((result.metadata as any)?.envId).toBe("e42");
+    expect((result.metadata as any)?.instrType).toBe("env");
   });
 
   it("AST node with real source tokens slices displayText from code", () => {

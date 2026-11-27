@@ -1,4 +1,5 @@
 import type { CseTraceEnd } from "@sourceacademy/common-cse-machine";
+import { CSE_DIRECTORY_ID } from "@sourceacademy/common-cse-machine";
 import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
@@ -82,6 +83,12 @@ export abstract class PyCseEvaluatorBase extends BasicEvaluator {
     this.csePlugin = conductor.registerPlugin(
       CseMachinePlugin as never,
     ) as unknown as CseMachinePlugin;
+
+    // Only §3 and §4 send snapshots (see evaluateChunk), so only they have anything for the CSE
+    // machine tab: the host loads the plugin that contributes it, as js-slang's evaluator does.
+    if (variant >= 3) {
+      void conductor.hostLoadPlugin(CSE_DIRECTORY_ID);
+    }
 
     if (variant >= 2) {
       this.dataVisualizerPlugin = conductor.registerPlugin(PythonDataVisualizerRunnerPlugin);

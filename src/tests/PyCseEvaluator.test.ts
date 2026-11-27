@@ -53,15 +53,16 @@ function makeMockConductor(files: Record<string, string> = {}) {
     run = [];
   });
   const resetRun = jest.fn().mockResolvedValue(undefined);
+  const hostLoadPlugin = jest.fn(() => Promise.resolve());
   const conductor = {
     requestFile: (name: string) => Promise.resolve(files[name]),
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
     registerPlugin: () => ({ sendBatch, endRun, resetRun }),
-    hostLoadPlugin: () => Promise.resolve(),
+    hostLoadPlugin,
   } as unknown as IRunnerPlugin;
-  return { conductor, results, errors, outputs, sendSnapshots, batches, ends };
+  return { conductor, results, errors, outputs, sendSnapshots, batches, ends, hostLoadPlugin };
 }
 
 describe("PyCseEvaluator1 (chapter 1, no CSE snapshots)", () => {
@@ -327,5 +328,23 @@ describe("PyCseEvaluator1..4 (chapter selection)", () => {
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["10\n", "True\n"]);
+  });
+});
+
+describe("the CSE machine plugin", () => {
+  test("is loaded by the evaluators of Python §3 and §4, which send snapshots", () => {
+    for (const Evaluator of [PyCseEvaluator3, PyCseEvaluator4]) {
+      const { conductor, hostLoadPlugin } = makeMockConductor();
+      new Evaluator(conductor);
+      expect(hostLoadPlugin).toHaveBeenCalledWith("cse-machine");
+    }
+  });
+
+  test("is not loaded by those of §1 and §2, which have no snapshots to show", () => {
+    for (const Evaluator of [PyCseEvaluator1, PyCseEvaluator2]) {
+      const { conductor, hostLoadPlugin } = makeMockConductor();
+      new Evaluator(conductor);
+      expect(hostLoadPlugin).not.toHaveBeenCalledWith("cse-machine");
+    }
   });
 });
