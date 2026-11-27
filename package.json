@@ -1,6 +1,9 @@
 {
   "name": "@sourceacademy/py-slang",
   "packageManager": "yarn@4.13.0+sha512.5c20ba010c99815433e5c8453112165e673f1c7948d8d2b267f4b5e52097538658388ebc9f9580656d9b75c5cc996f990f611f99304a2197d4c56d21eea370e7",
+  "engines": {
+    "node": ">=24"
+  },
   "version": "1.2.0",
   "publishConfig": {
     "access": "public",
@@ -59,7 +62,7 @@
     "@types/jest": "^29.5.14",
     "@types/moo": "^0.5.10",
     "@types/nearley": "^2.11.5",
-    "@types/node": "^18.19.84",
+    "@types/node": "^24",
     "acorn": "^8.15.0",
     "browser-basedpyright": "1.40.2",
     "eslint": "^9.39.4",

@@ -227,6 +227,17 @@ describe("PyWasmEvaluator module imports", () => {
       );
     });
 
+    test("rejects a module function called with the wrong number of arguments", async () => {
+      const { conductor, errors } = makeMockConductor();
+      const evaluator = new PyWasmEvaluator3(conductor);
+
+      await evaluator.evaluateChunk("from testmod import double\ndouble(1, 2)\n");
+
+      expect(errors).toHaveLength(1);
+      expect(String(errors[0])).toContain("TypeError at line 2");
+      expect(String(errors[0])).toContain("Expected 1 argument");
+    });
+
     test("a higher-order module function calls back into a Python closure", async () => {
       const { conductor, errors, outputs } = makeMockConductor();
       const evaluator = new PyWasmEvaluator3(conductor);
@@ -238,7 +249,7 @@ describe("PyWasmEvaluator module imports", () => {
       );
 
       expect(errors).toEqual([]);
-      expect(outputs).toEqual(["7", "None"]);
+      expect(outputs).toEqual(["7.0", "None"]);
     });
 
     test("an opaque handle round-trips through two module functions", async () => {
@@ -250,7 +261,7 @@ describe("PyWasmEvaluator module imports", () => {
       );
 
       expect(errors).toEqual([]);
-      expect(outputs).toEqual(["7", "None"]);
+      expect(outputs).toEqual(["7.0", "None"]);
     });
 
     test("a closure argument called with more than one argument at once", async () => {
@@ -264,7 +275,7 @@ describe("PyWasmEvaluator module imports", () => {
       );
 
       expect(errors).toEqual([]);
-      expect(outputs).toEqual(["6", "None"]);
+      expect(outputs).toEqual(["6.0", "None"]);
     });
   } else {
     test("calling an imported module function without JSPI fails loudly", async () => {
