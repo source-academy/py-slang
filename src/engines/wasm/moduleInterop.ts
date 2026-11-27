@@ -1,4 +1,5 @@
-import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
+import { DataType, TypedValue } from "@sourceacademy/conductor/types";
+import type { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import { ENV_HEAD_SIZE, GC_OBJECT_HEADER_SIZE, TYPE_TAG } from "./runtime";
 import type { WasmExports } from "./types";
 
@@ -75,7 +76,7 @@ export type PreparedModuleBindings = {
   /** HOSTREF handle table — grows at runtime as module calls return new
    * opaques/closures. */
   handles: ModuleHandle[];
-  dh: IDataHandler;
+  dh: GenericDataHandler;
   /** Called immediately before a module closure is invoked, with the
    * source span supplied by the compiled call site. */
   onCallLocation?: (start: number, end: number) => void;
@@ -86,7 +87,7 @@ export type PreparedModuleBindings = {
 /** Async phase: converts one module-export TypedValue into the synchronous
  * HostModuleValue form, registering opaques/closures in `handles`. */
 async function typedToHostValue(
-  dh: IDataHandler,
+  dh: GenericDataHandler,
   value: TypedValue<DataType> | undefined | null,
   name: string,
   handles: ModuleHandle[],
@@ -137,7 +138,7 @@ async function typedToHostValue(
 /** Builds the PreparedModuleBindings for a chunk's imports, in binding order.
  * Called by PyWasmEvaluator's loadImports before compilation. */
 export async function prepareModuleBindings(
-  dh: IDataHandler,
+  dh: GenericDataHandler,
   entries: { name: string; value: TypedValue<DataType> }[],
 ): Promise<PreparedModuleBindings> {
   const handles: ModuleHandle[] = [];
@@ -283,9 +284,13 @@ async function readWasmValue(
       // analogue of PVML's pvmlToModule "closure" case (pvml/modules.ts),
       // which does the same thing via its own callPvml re-entry hook. The
       // placeholder signature (no declared args/return type) is fine for
-      // the same reason it is there: dh.closure_call_unchecked never
-      // checks it, and module signatures carry no Python-side arity info
-      // to reproduce here anyway.
+      // the same reason it is there: module signatures carry no Python-side
+      // arity info to reproduce here, and the wasm side checks the arity
+      // itself (applyClosureFinish raises the wrong-arity TypeError). The
+      // closure is flagged vararg, with no fixed arguments, because a
+      // module may call it with the *checked* `closure_call`, which rejects
+      // any argument beyond the declared ones ("Expected 0 arguments, got
+      // 3"): only `closure_call_unchecked` skips that check.
       const closureTag = tag;
       const closureVal = val;
       return dh.closure_make(
@@ -306,6 +311,8 @@ async function readWasmValue(
           const [resultTag, resultVal] = exports.applyClosureFinish(callArgs.length);
           return readWasmValue(resultTag, resultVal, memory, dataEnd, prepared, exports);
         },
+        undefined,
+        true,
       );
     }
     default:
@@ -359,7 +366,10 @@ export function createModuleCall(
       args.push(await readWasmValue(tag, val, memory, dataEnd, prepared, exports));
     }
 
-    const gen = prepared.dh.closure_call_unchecked(handle.value, args);
+    // The checked call, as the CSE, PVML and py2js engines make: it rejects a wrong number of
+    // arguments and an argument of the wrong type ("Expected argument 0 to have type ...") before the
+    // module function runs. The unchecked one let both through.
+    const gen = prepared.dh.closure_call(handle.value, args, DataType.ANY);
     let step = await gen.next();
     while (!step.done) {
       step = await gen.next();
