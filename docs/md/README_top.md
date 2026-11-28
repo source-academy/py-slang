@@ -17,6 +17,8 @@
 
 ## <a href="python_4/">Python §4</a>
 
+## <a href="python_4_typed/">Python §4 Typed</a>
+
 ### Style guide
 
 The <a href="python_styleguide.pdf">Python Style Guide</a> gives general
@@ -35,6 +37,8 @@ the Source Academy.
 #### <a href="python_3.pdf">Specification of Python §3</a>
   
 #### <a href="python_4.pdf">Specification of Python §4</a>
+
+#### <a href="python_4_typed.pdf">Specification of Python §4 Typed</a>
 
 #### <a href="e-stepper/">Guide to the Environment Stepper</a>
 
