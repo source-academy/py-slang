@@ -8,7 +8,7 @@ It contains multiple [engines](https://github.com/source-academy/py-slang/tree/m
 
 ## Usage
 
-Building needs Node 24 (the version in `.node-version`; see the [Node.js version](https://github.com/source-academy/documentation/blob/main/app/docs/developers/node-version.md) page).
+Building needs Node 24 (the version in `.node-version`; see the [Node.js version](https://docs.sourceacademy.org/developer/node-version) page).
 
 To create a production build, run
 
